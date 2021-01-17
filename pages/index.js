@@ -4,6 +4,7 @@ import codes from "../codes.js";
 import { useEffect, useState } from "react";
 import DataTable from "react-data-table-component";
 import products from "../products.json";
+import { YMInitializer } from "react-yandex-metrika";
 
 export default function Home({ codes, products }) {
   const [selectedCategory, setSelectedCategry] = useState("Все");
@@ -84,6 +85,7 @@ export default function Home({ codes, products }) {
       <Head>
         <title>Промокоды для Яндекс.Маректа</title>
         <link rel="icon" href="/favicon.ico" />
+        <meta name="yandex-verification" content="8b9b2457041ebe9e" />
       </Head>
       <header className="bg-warning mb-3">
         <Container>
@@ -150,6 +152,7 @@ export default function Home({ codes, products }) {
           Создатель сайта не имеет отношения к компаниям Яндекс и Яндекс.Марект
         </Container>
       </footer>
+      <YMInitializer accounts={[71256484]} />
     </div>
   );
 }
