@@ -32,3 +32,11 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+captcha.png
+products.csv
+products_json.json
+market_helper*
+products*.json
+tmp
+_*

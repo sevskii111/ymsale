@@ -1,0 +1,7114 @@
+const fs = require("fs");
+const puppeteer = require("puppeteer");
+const fetch = require("node-fetch");
+const FormData = require("form-data");
+const Gists = require("gists");
+const { exec } = require("child_process");
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const fast = process.argv.indexOf("--fast") !== -1;
+
+const gist = process.argv.indexOf("--gist");
+let gists = null;
+
+if (gist) {
+  const gistApi = process.argv[gist + 1];
+  gists = new Gists({
+    token: gistApi,
+  });
+}
+
+const debug = process.argv.indexOf("--debug") !== -1;
+const captcha = process.argv.indexOf("--captcha");
+let captchaApi;
+
+if (captcha !== -1) {
+  captchaApi = process.argv[captcha + 1];
+}
+
+let browserConfig = { args: [] };
+
+if (debug) {
+  browserConfig.headless = false;
+  browserConfig.args.push(
+    "--window-size=1400,900",
+    "--remote-debugging-port=9222",
+    "--remote-debugging-address=0.0.0.0",
+    "--disable-gpu",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--blink-settings=imagesEnabled=true"
+  );
+}
+
+const root = process.argv.indexOf("--root") !== -1;
+
+if (root) {
+  browserConfig.args.push("--no-sandbox");
+}
+
+async function solveCaptcha() {
+  const formData = new FormData();
+  formData.append("key", captchaApi);
+  formData.append("file", fs.createReadStream(`captcha.png`));
+
+  const id = (
+    await fetch("http://rucaptcha.com/in.php", {
+      method: "POST",
+      body: formData,
+    }).then((res) => res.text())
+  ).match(/\d+/)[0];
+
+  let solution;
+
+  while (!solution) {
+    const res = await fetch(
+      `http://rucaptcha.com/res.php?key=${captchaApi}&action=get&id=${id}&json=1`
+    ).then((res) => res.json());
+    if (res.request !== "CAPCHA_NOT_READY") {
+      solution = res.request;
+    }
+    await sleep(500);
+  }
+  return solution;
+}
+
+(async function () {
+  let browser = await puppeteer.launch(browserConfig);
+  let page = await browser.newPage();
+  page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 Edg/87.0.664.75"
+  );
+
+  async function parseAllProducts() {
+    await page.goto(
+      `https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cvredirect=2&cpa=0&onstock=0&local-offers-first=0`
+    );
+    //await page.waitForNavigation({ waitUntil: "networkidle0" });
+    let captchaEl = await page.$(".captcha__image img");
+    while (captchaEl) {
+      await captchaEl.screenshot({ path: `captcha.png` });
+      const solution = await solveCaptcha();
+      await page.focus("input");
+      await page.keyboard.type(solution);
+      await page.click("button");
+      await page.waitForNavigation();
+      captchaEl = await page.$(".captcha__image img");
+    }
+    await sleep(5000);
+    await page.evaluate(async () => {
+      await fetch("https://market.yandex.ru/api/settings/region", {
+        headers: {
+          accept: "*/*",
+          "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+          "cache-control": "no-cache",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          pragma: "no-cache",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          sk: window.state.user.sk,
+        },
+        referrer:
+          "https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cpa=0&lr=213&onstock=0&local-offers-first=0",
+        referrerPolicy: "unsafe-url",
+        body: "options=%7B%22region%22%3A%22213%22%7D",
+        method: "POST",
+        mode: "cors",
+        credentials: "include",
+      });
+      try {
+        document
+          .querySelector(".zsSJkfeAPw._16jABpOZ2-._36y1jOUHs5.XAAXSBumqa")
+          .click();
+      } catch (e) {}
+    });
+    await sleep(5000);
+
+    const products = await page.evaluate(async (fast) => {
+      /////////////////////////////////////////////////////////////////////////////
+      const hids = [
+        {
+          hid: "191211",
+          subCategory: "Модули памяти",
+        },
+        {
+          hid: "91019",
+          subCategory: "Процессоры (CPU)",
+        },
+        {
+          hid: "16309373",
+          subCategory: "Внутренние твердотельные накопители (SSD)",
+        },
+        {
+          hid: "91013",
+          subCategory: "Ноутбуки",
+        },
+        {
+          hid: "6427100",
+          subCategory: "Планшеты",
+        },
+        {
+          hid: "91491",
+          subCategory: "Мобильные телефоны",
+        },
+        {
+          hid: "91618",
+          subCategory: "Кухонные мойки",
+        },
+        {
+          hid: "10790732",
+          subCategory: "Детские микроскопы и телескопы",
+        },
+        {
+          hid: "90551",
+          subCategory: "Микрофоны",
+        },
+        {
+          hid: "16306126",
+          subCategory: "Фитинги для металлических труб",
+        },
+        {
+          hid: "90746",
+          subCategory: "Канцелярские наборы",
+        },
+        {
+          hid: "10752680",
+          subCategory: "Назальные аспираторы для малышей",
+        },
+        {
+          hid: "16079629",
+          subCategory: "Садовые щетки и метлы",
+        },
+        {
+          hid: "13626208",
+          subCategory: "Кисти для рисования",
+        },
+        {
+          hid: "6202209",
+          subCategory: "Камеры видеонаблюдения",
+        },
+        {
+          hid: "13858708",
+          subCategory: "Точилки для карандашей",
+        },
+        {
+          hid: "7286537",
+          subCategory: "Тумбы",
+        },
+        {
+          hid: "90404",
+          subCategory: "Автомагнитолы",
+        },
+        {
+          hid: "90581",
+          subCategory: "Кухонные вытяжки",
+        },
+        {
+          hid: "191213",
+          subCategory: "Проекционные экраны",
+        },
+        {
+          hid: "90417",
+          subCategory: "Автомобильные телевизоры и мониторы",
+        },
+        {
+          hid: "91052",
+          subCategory: "Мониторы",
+        },
+        {
+          hid: "91605",
+          subCategory: "Строительные эмали",
+        },
+        {
+          hid: "91661",
+          subCategory: "Фрезеры",
+        },
+        {
+          hid: "90479",
+          subCategory: "Автомобильное трансмиссионное масло",
+        },
+        {
+          hid: "90449",
+          subCategory: "Топливные фильтры для автомобилей",
+        },
+        {
+          hid: "91105",
+          subCategory: "TV-тюнеры",
+        },
+        {
+          hid: "90899",
+          subCategory: "Книги по карьере",
+        },
+        {
+          hid: "90629",
+          subCategory: "Кронштейны и стойки для телевизоров и аудиотехники",
+        },
+        {
+          hid: "91079",
+          subCategory:
+            "Кронштейны, держатели и подставки для компьютерной техники",
+        },
+        {
+          hid: "13080554",
+          subCategory: "Аксессуары для техники",
+        },
+        {
+          hid: "90602",
+          subCategory: "Пароварки",
+        },
+        {
+          hid: "91634",
+          subCategory: "Обои",
+        },
+        {
+          hid: "90598",
+          subCategory: "Кофемолки электрические",
+        },
+        {
+          hid: "13858281",
+          subCategory: "Тетради",
+        },
+        {
+          hid: "90639",
+          subCategory: "Телевизоры",
+        },
+        {
+          hid: "90409",
+          subCategory: "Аксессуары для автомобильной аудиотехники",
+        },
+        {
+          hid: "90584",
+          subCategory: "Посудомоечные машины",
+        },
+        {
+          hid: "90463",
+          subCategory: "Автомобильные компрессоры",
+        },
+        {
+          hid: "90606",
+          subCategory: "Аксессуары для кофемашин и кофеварок",
+        },
+        {
+          hid: "91600",
+          subCategory: "Строительные лаки",
+        },
+        {
+          hid: "242699",
+          subCategory: "Оверлоки и распошивальные машины",
+        },
+        {
+          hid: "91464",
+          subCategory: "Радиотелефоны",
+        },
+        {
+          hid: "91525",
+          subCategory: "Беговые дорожки",
+        },
+        {
+          hid: "6202206",
+          subCategory: "Видеорегистраторы систем видеонаблюдения",
+        },
+        {
+          hid: "989050",
+          subCategory: "Ходунки и прыгунки для малышей",
+        },
+        {
+          hid: "6038874",
+          subCategory: "Аккумуляторные батареи",
+        },
+        {
+          hid: "5017501",
+          subCategory: "Хлебницы и корзины для хлеба",
+        },
+        {
+          hid: "6433382",
+          subCategory: "Отпугиватели и ловушки для птиц и грызунов",
+        },
+        {
+          hid: "989045",
+          subCategory: "Манежи для малышей",
+        },
+        {
+          hid: "995922",
+          subCategory: "Освещение для аквариумов и террариумов",
+        },
+        {
+          hid: "6269371",
+          subCategory: "Автомобильные видеорегистраторы",
+        },
+        {
+          hid: "989026",
+          subCategory: "Рюкзаки, сумки-кенгуру для малышей",
+        },
+        {
+          hid: "294644",
+          subCategory: "Скобы, гвозди и штифты для пистолетов и степлеров",
+        },
+        {
+          hid: "989043",
+          subCategory: "Колыбели и люльки для малышей",
+        },
+        {
+          hid: "6038878",
+          subCategory:
+            "Аккумуляторы и зарядные устройства для электроинструмента",
+        },
+        {
+          hid: "396901",
+          subCategory: "Аксессуары и принадлежности для футбола",
+        },
+        {
+          hid: "7296416",
+          subCategory: "Стеллажи и этажерки",
+        },
+        {
+          hid: "10477020",
+          subCategory: "Наборы игрушечных железных дорог, локомотивы, вагоны",
+        },
+        {
+          hid: "10683255",
+          subCategory: "Спортивные игры и игрушки для улицы",
+        },
+        {
+          hid: "13792285",
+          subCategory: "Садовые ручные опрыскиватели",
+        },
+        {
+          hid: "15293531",
+          subCategory: "Расходные материалы для 3D печати",
+        },
+        {
+          hid: "11870336",
+          subCategory: "Парты и столы",
+        },
+        {
+          hid: "14425785",
+          subCategory: "Аксессуары для мультиварок",
+        },
+        {
+          hid: "16298166",
+          subCategory: "Экраны для ванн",
+        },
+        {
+          hid: "13203592",
+          subCategory: "Приборы для ухода за лицом",
+        },
+        {
+          hid: "10682584",
+          subCategory: "Мебель для кукол",
+        },
+        {
+          hid: "10682603",
+          subCategory: "Украшения для девочек",
+        },
+        {
+          hid: "13351779",
+          subCategory: "Йогуртницы",
+        },
+        {
+          hid: "13520618",
+          subCategory: "Поильники для малышей",
+        },
+        {
+          hid: "14340298",
+          subCategory: "Аппараты для сварки пластиковых труб",
+        },
+        {
+          hid: "13776520",
+          subCategory: "Шампуры",
+        },
+        {
+          hid: "10682629",
+          subCategory: "Надувные игрушки",
+        },
+        {
+          hid: "10834023",
+          subCategory: "Чехлы-аккумуляторы для телефонов",
+        },
+        {
+          hid: "12797896",
+          subCategory: "Штанги и грифы",
+        },
+        {
+          hid: "14946301",
+          subCategory: "Зарядные устройства для стандартных аккумуляторов",
+        },
+        {
+          hid: "15586488",
+          subCategory: "Удлинители на катушках, силовые удлинители",
+        },
+        {
+          hid: "10683243",
+          subCategory: "Сборные и надувные бассейны",
+        },
+        {
+          hid: "14288720",
+          subCategory: "Гантели для занятий спортом",
+        },
+        {
+          hid: "90580",
+          subCategory: "Встраиваемые духовые шкафы",
+        },
+        {
+          hid: "12644431",
+          subCategory: "Споты и трек-системы",
+        },
+        {
+          hid: "90633",
+          subCategory: "DVD и Blu-ray плееры",
+        },
+        {
+          hid: "15221832",
+          subCategory: "Аккумуляторные отвертки",
+        },
+        {
+          hid: "16452669",
+          subCategory: "Круги и матрасы для взрослых",
+        },
+        {
+          hid: "15756502",
+          subCategory: "Средства для лечения аллергии",
+        },
+        {
+          hid: "1565820",
+          subCategory: "Торшеры и напольные светильники",
+        },
+        {
+          hid: "14919550",
+          subCategory: "Брелоки и чехлы для автосигнализаций",
+        },
+        {
+          hid: "15618842",
+          subCategory: "Терморегуляторы для теплого пола и систем отопления",
+        },
+        {
+          hid: "15694869",
+          subCategory: "Инсталляции для унитазов, писсуаров, биде",
+        },
+        {
+          hid: "17623266",
+          subCategory: "Волейбольные мячи",
+        },
+        {
+          hid: "6430985",
+          subCategory: "Товары для создания поделок и аппликаций",
+        },
+        {
+          hid: "4981541",
+          subCategory: "Газовые горелки и паяльные лампы",
+        },
+        {
+          hid: "6504964",
+          subCategory: "Электровеники и электрошвабры",
+        },
+        {
+          hid: "989032",
+          subCategory: "Молокоотсосы для кормящих мам",
+        },
+        {
+          hid: "15683167",
+          subCategory: "Детские книжки с наклейками",
+        },
+        {
+          hid: "10682555",
+          subCategory: "Одежда для кукол",
+        },
+        {
+          hid: "14231717",
+          subCategory: "Насадки для граверов",
+        },
+        {
+          hid: "15093378",
+          subCategory: "Комфортеры для малышей",
+        },
+        {
+          hid: "16646164",
+          subCategory: "Держатели электродов",
+        },
+        {
+          hid: "91033",
+          subCategory: "Внутренние жесткие диски",
+        },
+        {
+          hid: "12410815",
+          subCategory: "Квадрокоптеры",
+        },
+        {
+          hid: "12644159",
+          subCategory: "Френч-прессы и кофейники",
+        },
+        {
+          hid: "13870556",
+          subCategory: "Садовые умывальники",
+        },
+        {
+          hid: "14382343",
+          subCategory: "Мотобуры",
+        },
+        {
+          hid: "278426",
+          subCategory: "Стамески",
+        },
+        {
+          hid: "13365057",
+          subCategory: "Комплектующие для смесителей",
+        },
+        {
+          hid: "12410435",
+          subCategory: "Моноподы и пульты для селфи",
+        },
+        {
+          hid: "7070735",
+          subCategory: "Самокаты",
+        },
+        {
+          hid: "13870564",
+          subCategory: "Канистры",
+        },
+        {
+          hid: "237418",
+          subCategory: "Встраиваемые варочные панели",
+        },
+        {
+          hid: "12341959",
+          subCategory: "Лазерные уровни и нивелиры",
+        },
+        {
+          hid: "13277104",
+          subCategory: "Зеркала косметические",
+        },
+        {
+          hid: "15715931",
+          subCategory: "Ящики для строительных инструментов",
+        },
+        {
+          hid: "15808762",
+          subCategory: "Струбцины",
+        },
+        {
+          hid: "13625828",
+          subCategory: "Глина для лепки",
+        },
+        {
+          hid: "13625855",
+          subCategory: "Инструменты и аксессуары для лепки",
+        },
+        {
+          hid: "1009485",
+          subCategory: "Медицинские аптечки",
+        },
+        {
+          hid: "14730866",
+          subCategory: "Боксерские перчатки",
+        },
+        {
+          hid: "15966482",
+          subCategory: "Компрессоры для аквариумов",
+        },
+        {
+          hid: "10792938",
+          subCategory: "Товары для выжигания и выпиливания",
+        },
+        {
+          hid: "267389",
+          subCategory: "Мотоблоки и культиваторы",
+        },
+        {
+          hid: "6504970",
+          subCategory: "Воздуходувки и садовые пылесосы",
+        },
+        {
+          hid: "13488218",
+          subCategory: "Снегокаты",
+        },
+        {
+          hid: "16043673",
+          subCategory: "Турники и брусья",
+        },
+        {
+          hid: "90566",
+          subCategory: "Стиральные машины",
+        },
+        {
+          hid: "857707",
+          subCategory: "Блоки питания для компьютеров",
+        },
+        {
+          hid: "91027",
+          subCategory: "Звуковые карты",
+        },
+        {
+          hid: "15147745",
+          subCategory: "Циркулярные (дисковые) пилы",
+        },
+        {
+          hid: "14728079",
+          subCategory: "Аксессуары для глюкометров",
+        },
+        {
+          hid: "16099944",
+          subCategory: "Сливки",
+        },
+        {
+          hid: "10754936",
+          subCategory: "Накладки для груди",
+        },
+        {
+          hid: "13625773",
+          subCategory: "Кинетический песок",
+        },
+        {
+          hid: "91082",
+          subCategory: "Источники бесперебойного питания",
+        },
+        {
+          hid: "91663",
+          subCategory: "Отбойные молотки",
+        },
+        {
+          hid: "15696738",
+          subCategory: "Капсулы, таблетки, пластины для стирки",
+        },
+        {
+          hid: "16053627",
+          subCategory: "Скакалки для фитнеса",
+        },
+        {
+          hid: "90540",
+          subCategory: "Медицинские диагностические тесты",
+        },
+        {
+          hid: "15719803",
+          subCategory: "Ванильный сахар, сахарная пудра ",
+        },
+        {
+          hid: "15773072",
+          subCategory: "Аксессуары для радиаторов",
+        },
+        {
+          hid: "488061",
+          subCategory: "Кабели и разъемы для аудио- и видеотехники",
+        },
+        {
+          hid: "15963644",
+          subCategory: "Когтеточки и комплексы для кошек",
+        },
+        {
+          hid: "995915",
+          subCategory: "Аквариумная химия",
+        },
+        {
+          hid: "14350309",
+          subCategory: "Присадки и промывки для автомобилей",
+        },
+        {
+          hid: "6439643",
+          subCategory: "Горшки, подставки для цветов",
+        },
+        {
+          hid: "90539",
+          subCategory: "Тонометры",
+        },
+        {
+          hid: "13775235",
+          subCategory: "Заборчики, сетки и бордюрные ленты для клумб и грядок",
+        },
+        {
+          hid: "6374360",
+          subCategory: "Корпуса для жестких дисков ",
+        },
+        {
+          hid: "90490",
+          subCategory: "Автомобильные шины",
+        },
+        {
+          hid: "6411795",
+          subCategory: "Коврики туристические",
+        },
+        {
+          hid: "90561",
+          subCategory: "Проигрыватели виниловых дисков",
+        },
+        {
+          hid: "13022034",
+          subCategory: "Полки, стойки, этажерки для ванных комнат",
+        },
+        {
+          hid: "16081615",
+          subCategory: "Формы для льда, шоколада и десертов",
+        },
+        {
+          hid: "91655",
+          subCategory: "Клеевые пистолеты",
+        },
+        {
+          hid: "15719821",
+          subCategory: "Сухое молоко, сливки",
+        },
+        {
+          hid: "14989778",
+          subCategory: "Ножницы, книпсеры и наборы",
+        },
+        {
+          hid: "90601",
+          subCategory: "Кухонные комбайны и измельчители",
+        },
+        {
+          hid: "13041121",
+          subCategory: "Чехлы для гладильных досок",
+        },
+        {
+          hid: "1626823",
+          subCategory: "Электрощиты",
+        },
+        {
+          hid: "14214098",
+          subCategory: "Кондитерские аксессуары",
+        },
+        {
+          hid: "14247341",
+          subCategory: "Протеины для спортсменов",
+        },
+        {
+          hid: "7812208",
+          subCategory: "Дорожные сумки",
+        },
+        {
+          hid: "7798524",
+          subCategory: "Ретроконсоли",
+        },
+        {
+          hid: "90534",
+          subCategory: "Очки для зрения",
+        },
+        {
+          hid: "13520476",
+          subCategory: "Соски для бутылочек",
+        },
+        {
+          hid: "90793",
+          subCategory: "Детские электромобили",
+        },
+        {
+          hid: "91073",
+          subCategory: "Инструменты для работы с кабелем",
+        },
+        {
+          hid: "91107",
+          subCategory: "Компьютерная акустика",
+        },
+        {
+          hid: "10682570",
+          subCategory: "Кукольные домики",
+        },
+        {
+          hid: "15336851",
+          subCategory:
+            "Пневматические аэрографы, краскопульты, текстурные пистолеты",
+        },
+        {
+          hid: "16686700",
+          subCategory:
+            "Прочие аксессуары и расходники для мелкой кухонной техники",
+        },
+        {
+          hid: "6290267",
+          subCategory: "Фаллоимитаторы",
+        },
+        {
+          hid: "90436",
+          subCategory: "Автомобильные аккумуляторы",
+        },
+        {
+          hid: "90627",
+          subCategory: "Пульты ДУ",
+        },
+        {
+          hid: "91708",
+          subCategory: "Камины и печи",
+        },
+        {
+          hid: "2134462",
+          subCategory: "Комплекты умного дома",
+        },
+        {
+          hid: "4874056",
+          subCategory: "Электропростыни и электроматрасы",
+        },
+        {
+          hid: "90508",
+          subCategory: "Прочие инструменты для ремонта автомобиля",
+        },
+        {
+          hid: "90716",
+          subCategory: "Зеркала интерьерные",
+        },
+        {
+          hid: "91117",
+          subCategory: "Рули, джойстики, геймпады",
+        },
+        {
+          hid: "91631",
+          subCategory: "Строительные ножницы",
+        },
+        {
+          hid: "12341948",
+          subCategory: "Дальномеры",
+        },
+        {
+          hid: "12341980",
+          subCategory: "Ручные уровни и отвесы",
+        },
+        {
+          hid: "12714763",
+          subCategory: "Транспортировка, переноски для животных",
+        },
+        {
+          hid: "14948486",
+          subCategory: "Штативы, вехи, рейки для нивелиров и лазерных уровней",
+        },
+        {
+          hid: "91275",
+          subCategory: "Ювелирные серьги",
+        },
+        {
+          hid: "1009490",
+          subCategory: "Ингаляторы, небулайзеры",
+        },
+        {
+          hid: "4951525",
+          subCategory: "Интерьерная подсветка",
+        },
+        {
+          hid: "6509300",
+          subCategory: "Детские стулья и табуреты",
+        },
+        {
+          hid: "13207991",
+          subCategory: "Автомобильные сумки и органайзеры",
+        },
+        {
+          hid: "15726402",
+          subCategory: "Лимонады и газированные напитки",
+        },
+        {
+          hid: "16063171",
+          subCategory: "Степ-платформы",
+        },
+        {
+          hid: "90471",
+          subCategory: "Коврики для автомобиля",
+        },
+        {
+          hid: "91519",
+          subCategory: "Палатки туристические",
+        },
+        {
+          hid: "91088",
+          subCategory: "Проводные роутеры (маршрутизаторы) и коммутаторы",
+        },
+        {
+          hid: "12341957",
+          subCategory: "Измерительные рулетки и мерные ленты",
+        },
+        {
+          hid: "12757915",
+          subCategory: "Пусковые провода для автомобилей",
+        },
+        {
+          hid: "15510364",
+          subCategory: "Картины по номерам и контурам",
+        },
+        {
+          hid: "16420273",
+          subCategory: "Инструменты и аксессуары для шитья и вышивания",
+        },
+        {
+          hid: "91259",
+          subCategory: "Наручные часы",
+        },
+        {
+          hid: "90549",
+          subCategory: "CD-проигрыватели",
+        },
+        {
+          hid: "90575",
+          subCategory: "Водонагреватели",
+        },
+        {
+          hid: "7812201",
+          subCategory: "Сумки",
+        },
+        {
+          hid: "15094413",
+          subCategory: "Граверы (Прямошлифовальные машины)",
+        },
+        {
+          hid: "15931298",
+          subCategory: "Встраиваемые конвекторы",
+        },
+        {
+          hid: "16298424",
+          subCategory: "Каркасы и ножки для ванн",
+        },
+        {
+          hid: "16371128",
+          subCategory: "Датчики температуры, влажности и заморозки",
+        },
+        {
+          hid: "91463",
+          subCategory: "Проводные телефоны",
+        },
+        {
+          hid: "13491603",
+          subCategory: "Настольный футбол, хоккей, бильярд",
+        },
+        {
+          hid: "15968176",
+          subCategory: "Наполнители и аксессуары для аквариумных фильтров",
+        },
+        {
+          hid: "6144238",
+          subCategory: "Домофоны",
+        },
+        {
+          hid: "10731573",
+          subCategory: "Плиткорезы",
+        },
+        {
+          hid: "12341955",
+          subCategory: "Штангенциркули",
+        },
+        {
+          hid: "13793422",
+          subCategory: "Катушки, кронштейны и направляющие для шлангов",
+        },
+        {
+          hid: "14696956",
+          subCategory: "Свечи зажигания",
+        },
+        {
+          hid: "1634405",
+          subCategory: "Серьги",
+        },
+        {
+          hid: "90937",
+          subCategory: "Книги по рукоделию",
+        },
+        {
+          hid: "226665",
+          subCategory: "Бинокли и зрительные трубы",
+        },
+        {
+          hid: "987235",
+          subCategory: "Сушилки для рук",
+        },
+        {
+          hid: "13626503",
+          subCategory: "Наборы для создания украшений",
+        },
+        {
+          hid: "13776946",
+          subCategory: "Наборы посуды для пикника",
+        },
+        {
+          hid: "15876118",
+          subCategory: "Вентиляционные решетки, диффузоры и анемостаты",
+        },
+        {
+          hid: "90751",
+          subCategory: "Канцелярские аксессуары",
+        },
+        {
+          hid: "14369617",
+          subCategory: "Краски для кузовного ремонта автомобилей",
+        },
+        {
+          hid: "16225731",
+          subCategory: "Комплектующие для систем защиты от протечек",
+        },
+        {
+          hid: "16051350",
+          subCategory: "Физиотерапевтические аппараты",
+        },
+        {
+          hid: "91651",
+          subCategory: "Перфораторы",
+        },
+        {
+          hid: "4965874",
+          subCategory: "Тонкогубцы, круглогубцы и длинногубцы",
+        },
+        {
+          hid: "14993676",
+          subCategory: "Солнцезащитные средства для тела",
+        },
+        {
+          hid: "4165204",
+          subCategory: "ТВ-приставки и медиаплееры",
+        },
+        {
+          hid: "6278685",
+          subCategory: "Подарочные фляги",
+        },
+        {
+          hid: "11911278",
+          subCategory: "Чехлы для мебели",
+        },
+        {
+          hid: "14246003",
+          subCategory: "Мусаты, точилки, точильные камни",
+        },
+        {
+          hid: "278353",
+          subCategory: "Альбомы по искусству и культуре",
+        },
+        {
+          hid: "4967999",
+          subCategory: "Товары для занятий йогой",
+        },
+        {
+          hid: "90478",
+          subCategory: "Моторные масла",
+        },
+        {
+          hid: "90939",
+          subCategory: "Сборники тостов, песен, игр и развлечений",
+        },
+        {
+          hid: "281935",
+          subCategory: "Мойки высокого давления",
+        },
+        {
+          hid: "989391",
+          subCategory: "Книги по военному делу",
+        },
+        {
+          hid: "10682672",
+          subCategory: "Играем в доктора",
+        },
+        {
+          hid: "979262",
+          subCategory: "VoIP-оборудование",
+        },
+        {
+          hid: "12341935",
+          subCategory: "Пирометры и тепловизоры",
+        },
+        {
+          hid: "15756914",
+          subCategory: "Противоопухолевые препараты и иммуномодуляторы",
+        },
+        {
+          hid: "7775900",
+          subCategory: "Ледобуры для рыбалки",
+        },
+        {
+          hid: "10683242",
+          subCategory: "Детские игровые домики и палатки",
+        },
+        {
+          hid: "90933",
+          subCategory: "Книги о саде и огороде",
+        },
+        {
+          hid: "90462",
+          subCategory: "Радар-детекторы автомобильные",
+        },
+        {
+          hid: "90578",
+          subCategory: "Кондиционеры",
+        },
+        {
+          hid: "91608",
+          subCategory: "Клеи бытовые и универсальные",
+        },
+        {
+          hid: "278428",
+          subCategory: "Пассатижи",
+        },
+        {
+          hid: "284394",
+          subCategory: "Сварочные аппараты",
+        },
+        {
+          hid: "12718081",
+          subCategory: "Груминг, инструменты для ухода за домашними животными",
+        },
+        {
+          hid: "7355200",
+          subCategory: "Счетчики воды",
+        },
+        {
+          hid: "14382344",
+          subCategory: "Шнеки и удлинители для мотобуров",
+        },
+        {
+          hid: "90712",
+          subCategory: "Ночники и декоративные светильники",
+        },
+        {
+          hid: "90693",
+          subCategory: "Столовые приборы",
+        },
+        {
+          hid: "90957",
+          subCategory: "Книги по аудио- , видео- ,  фото- и бытовой технике",
+        },
+        {
+          hid: "91028",
+          subCategory: "Компьютерные корпуса",
+        },
+        {
+          hid: "90675",
+          subCategory: "Шкафы",
+        },
+        {
+          hid: "90671",
+          subCategory: "Шторы",
+        },
+        {
+          hid: "91522",
+          subCategory: "Рюкзаки спортивные и городские",
+        },
+        {
+          hid: "91517",
+          subCategory: "Рыболовные удилища",
+        },
+        {
+          hid: "240126",
+          subCategory: "Аксессуары для проекторов",
+        },
+        {
+          hid: "91628",
+          subCategory: "Тиски",
+        },
+        {
+          hid: "6119006",
+          subCategory: "Пледы и покрывала",
+        },
+        {
+          hid: "477439",
+          subCategory: "Цифровые бытовые метеостанции",
+        },
+        {
+          hid: "294648",
+          subCategory: "Коронки и наборы для электроинструмента",
+        },
+        {
+          hid: "12644434",
+          subCategory: "Встраиваемые светильники",
+        },
+        {
+          hid: "13901767",
+          subCategory: "Трещотки и воротки",
+        },
+        {
+          hid: "13793401",
+          subCategory: "Шланги и комплекты для полива",
+        },
+        {
+          hid: "14304975",
+          subCategory: "Футбольные мячи",
+        },
+        {
+          hid: "15003480",
+          subCategory: "Тепловые пушки",
+        },
+        {
+          hid: "12644363",
+          subCategory: "Заварочные чайники",
+        },
+        {
+          hid: "4953550",
+          subCategory: "Защита картера и КПП",
+        },
+        {
+          hid: "267397",
+          subCategory: "Вертикуттеры и аэраторы",
+        },
+        {
+          hid: "12341943",
+          subCategory: "Детекторы проводки, труб и конструкций",
+        },
+        {
+          hid: "12644151",
+          subCategory: "Чайники для кипячения воды",
+        },
+        {
+          hid: "7286126",
+          subCategory: "Кресла",
+        },
+        {
+          hid: "13771699",
+          subCategory: "Садовые шатры",
+        },
+        {
+          hid: "91664",
+          subCategory: "Электрические водяные насосы",
+        },
+        {
+          hid: "13477846",
+          subCategory: "Салонные фильтры",
+        },
+        {
+          hid: "267390",
+          subCategory: "Снегоуборщики",
+        },
+        {
+          hid: "226667",
+          subCategory: "Электрогенераторы",
+        },
+        {
+          hid: "278345",
+          subCategory: "Роликовые коньки",
+        },
+        {
+          hid: "11915828",
+          subCategory: "Банкетки и скамьи",
+        },
+        {
+          hid: "6280628",
+          subCategory: "Столы и столики",
+        },
+        {
+          hid: "12943710",
+          subCategory: "Ведра и тазы",
+        },
+        {
+          hid: "13775856",
+          subCategory: "Насосы и комплекты для фонтанов",
+        },
+        {
+          hid: "14137164",
+          subCategory: "Мангалы",
+        },
+        {
+          hid: "14214028",
+          subCategory: "Штопоры и принадлежности для бутылок",
+        },
+        {
+          hid: "91529",
+          subCategory: "Велосипеды для взрослых и детей",
+        },
+        {
+          hid: "904381",
+          subCategory: "Рекламные конструкции и материалы",
+        },
+        {
+          hid: "6119048",
+          subCategory: "Ковры и ковровые дорожки",
+        },
+        {
+          hid: "1003092",
+          subCategory: "Матрасы",
+        },
+        {
+          hid: "10434122",
+          subCategory: "Строительные глубинные вибраторы",
+        },
+        {
+          hid: "14256185",
+          subCategory: "Шейкеры и бутылки для спортсменов",
+        },
+        {
+          hid: "14732168",
+          subCategory: "Строительные тенты",
+        },
+        {
+          hid: "15094330",
+          subCategory: "Эксцентриковые шлифмашины",
+        },
+        {
+          hid: "237420",
+          subCategory: "Кухонные плиты",
+        },
+        {
+          hid: "7683906",
+          subCategory: "Кухонная навеска",
+        },
+        {
+          hid: "13022247",
+          subCategory: "Коврики для ванной и туалета",
+        },
+        {
+          hid: "14193156",
+          subCategory: "Станки и приспособления для заточки инструмента",
+        },
+        {
+          hid: "91658",
+          subCategory: "Электрические краскопульты",
+        },
+        {
+          hid: "242704",
+          subCategory: "Швейные машины",
+        },
+        {
+          hid: "4949780",
+          subCategory: "Дефлекторы автомобильные",
+        },
+        {
+          hid: "9383793",
+          subCategory: "Уличное освещение",
+        },
+        {
+          hid: "12494823",
+          subCategory: "Сервизы",
+        },
+        {
+          hid: "14368112",
+          subCategory: "Специальные масла для автомобилей",
+        },
+        {
+          hid: "278342",
+          subCategory: "Картины, постеры, гобелены, панно",
+        },
+        {
+          hid: "4865100",
+          subCategory: "Электроодеяла",
+        },
+        {
+          hid: "13792979",
+          subCategory: "Прочие инструменты для обработки почвы",
+        },
+        {
+          hid: "13446358",
+          subCategory: "Туристические горелки",
+        },
+        {
+          hid: "14245898",
+          subCategory: "Подставки для кухонных ножей",
+        },
+        {
+          hid: "14231548",
+          subCategory: "Насадки для многофункционального инструмента",
+        },
+        {
+          hid: "14419833",
+          subCategory: "Заклепочники",
+        },
+        {
+          hid: "14947454",
+          subCategory: "Гвоздескобозабивные пистолеты и строительные степлеры",
+        },
+        {
+          hid: "14343626",
+          subCategory: "Мотопомпы",
+        },
+        {
+          hid: "15093449",
+          subCategory: "Дельташлифмашины",
+        },
+        {
+          hid: "226668",
+          subCategory: "Автоматические выключатели дифференциального тока",
+        },
+        {
+          hid: "278352",
+          subCategory: "Книги по фотоискусству",
+        },
+        {
+          hid: "15194000",
+          subCategory: "Водяные тепловентиляторы",
+        },
+        {
+          hid: "14222486",
+          subCategory: "Насосы для велосипедов",
+        },
+        {
+          hid: "6268030",
+          subCategory: "Расходные материалы для ламинаторов",
+        },
+        {
+          hid: "14222110",
+          subCategory: "Системы пылеудаления для электроинструмента",
+        },
+        {
+          hid: "15472273",
+          subCategory: "Системы капельного полива",
+        },
+        {
+          hid: "1626822",
+          subCategory: "Устройства защитного отключения (УЗО)",
+        },
+        {
+          hid: "14192138",
+          subCategory: "Фильтры для кухонных вытяжек",
+        },
+        {
+          hid: "14305044",
+          subCategory: "Баскетбольные мячи",
+        },
+        {
+          hid: "13106890",
+          subCategory: "Греющий кабель и комплектующие",
+        },
+        {
+          hid: "91095",
+          subCategory: "Сетевые карты и адаптеры",
+        },
+        {
+          hid: "278427",
+          subCategory: "Плашки и метчики",
+        },
+        {
+          hid: "1564516",
+          subCategory: "Электросушилки для овощей, фруктов, грибов",
+        },
+        {
+          hid: "11899034",
+          subCategory: "Торцевые головки, свечные ключи, торцевые ключи",
+        },
+        {
+          hid: "14739382",
+          subCategory: "Краны для чистой воды к бытовым фильтрам",
+        },
+        {
+          hid: "14369615",
+          subCategory: "Встраиваемые холодильники",
+        },
+        {
+          hid: "91587",
+          subCategory: "Ракетки для большого тенниса",
+        },
+        {
+          hid: "5013720",
+          subCategory: "Пластиковые пакеты",
+        },
+        {
+          hid: "12934437",
+          subCategory: "Фрезы",
+        },
+        {
+          hid: "6517808",
+          subCategory: "Ревизионные люки",
+        },
+        {
+          hid: "14214061",
+          subCategory: "Ручные соковыжималки",
+        },
+        {
+          hid: "91632",
+          subCategory: "Пилы и ножовки ручные",
+        },
+        {
+          hid: "7683845",
+          subCategory: "Аксессуары для готовки",
+        },
+        {
+          hid: "13022237",
+          subCategory: "Ершики туалетные",
+        },
+        {
+          hid: "14727323",
+          subCategory: "Ножи и насадки для газонокосилок",
+        },
+        {
+          hid: "14426389",
+          subCategory: "Строительные фены",
+        },
+        {
+          hid: "12943940",
+          subCategory: "Мусорные ведра и баки",
+        },
+        {
+          hid: "12501720",
+          subCategory: "Кухонные термометры и таймеры",
+        },
+        {
+          hid: "13022240",
+          subCategory: "Шторы и карнизы для ванной",
+        },
+        {
+          hid: "14739825",
+          subCategory: "Обувницы",
+        },
+        {
+          hid: "91516",
+          subCategory: "Аксессуары для охоты и рыболовства",
+        },
+        {
+          hid: "15221859",
+          subCategory: "Гайковерты",
+        },
+        {
+          hid: "14414642",
+          subCategory: "Расширительные баки",
+        },
+        {
+          hid: "542020",
+          subCategory: "Комплекты акустики",
+        },
+        {
+          hid: "7683675",
+          subCategory: "Ирригаторы",
+        },
+        {
+          hid: "10484476",
+          subCategory: "Усиление для гитар и клавишных",
+        },
+        {
+          hid: "15646187",
+          subCategory: "Триммеры",
+        },
+        {
+          hid: "17958741",
+          subCategory: "Дверные доводчики",
+        },
+        {
+          hid: "989049",
+          subCategory: "Качели и шезлонги для малышей",
+        },
+        {
+          hid: "15715254",
+          subCategory: "Диски и чашки шлифовальные",
+        },
+        {
+          hid: "15694313",
+          subCategory: "Пневмотрещотки",
+        },
+        {
+          hid: "7869391",
+          subCategory: "Сумки для прогулок",
+        },
+        {
+          hid: "90919",
+          subCategory: "Книги по изобразительному искусству",
+        },
+        {
+          hid: "15775081",
+          subCategory: "Замки врезные",
+        },
+        {
+          hid: "989023",
+          subCategory: "Радио- и видеоняни",
+        },
+        {
+          hid: "16610558",
+          subCategory: "Шестигранные и шлицевые ключи",
+        },
+        {
+          hid: "15694311",
+          subCategory: "Пневмопистолеты",
+        },
+        {
+          hid: "16066647",
+          subCategory: "Балансировочные тренажеры",
+        },
+        {
+          hid: "16407095",
+          subCategory: "Пропитки",
+        },
+        {
+          hid: "15756922",
+          subCategory: "Держатели и штанги для душа",
+        },
+        {
+          hid: "15775109",
+          subCategory: "Бачки для унитазов",
+        },
+        {
+          hid: "16213912",
+          subCategory: "Реле",
+        },
+        {
+          hid: "91003",
+          subCategory: "Книги по магии, оккультизму, мистике",
+        },
+        {
+          hid: "10682564",
+          subCategory: "Коляски для кукол",
+        },
+        {
+          hid: "15706546",
+          subCategory: "Снегоуборочные лопаты и движки для снега",
+        },
+        {
+          hid: "16387450",
+          subCategory: "Инструменты для ячеистого бетона",
+        },
+        {
+          hid: "16017607",
+          subCategory: "Переносные светильники",
+        },
+        {
+          hid: "16673885",
+          subCategory: "Флейты",
+        },
+        {
+          hid: "989027",
+          subCategory: "Детские весы",
+        },
+        {
+          hid: "17844717",
+          subCategory: "Аксессуары для клавишных инструментов",
+        },
+        {
+          hid: "17623227",
+          subCategory: "Аксессуары и принадлежности для волейбола",
+        },
+        {
+          hid: "989031",
+          subCategory: "Подогреватели детских бутылочек",
+        },
+        {
+          hid: "10682671",
+          subCategory: "Играем в магазин",
+        },
+        {
+          hid: "17433551",
+          subCategory: "Ломы и гвоздодёры",
+        },
+        {
+          hid: "14868726",
+          subCategory: "Конверты и спальные мешки для малышей",
+        },
+        {
+          hid: "13483550",
+          subCategory: "Надувные комплексы и батуты",
+        },
+        {
+          hid: "14220244",
+          subCategory: "Направляющие и упоры для электроинструмента",
+        },
+        {
+          hid: "10477022",
+          subCategory: "Аксессуары и запчасти для игрушечных железных дорог",
+        },
+        {
+          hid: "91774",
+          subCategory: "Детекторы и счетчики банкнот",
+        },
+        {
+          hid: "15806939",
+          subCategory: "Массажные матрасы и подушки",
+        },
+        {
+          hid: "15094812",
+          subCategory: "Реноваторы (МФИ)",
+        },
+        {
+          hid: "12644154",
+          subCategory: "Аксессуары для приготовления напитков",
+        },
+        {
+          hid: "15756876",
+          subCategory: "Шланги для душа",
+        },
+        {
+          hid: "989030",
+          subCategory: "Стерилизаторы детские",
+        },
+        {
+          hid: "15148816",
+          subCategory: "Монтажные пилы",
+        },
+        {
+          hid: "16650220",
+          subCategory: "Кислородные баллончики",
+        },
+        {
+          hid: "13837606",
+          subCategory: "Сопутствующие товары для пайки",
+        },
+        {
+          hid: "91020",
+          subCategory: "Материнские платы",
+        },
+        {
+          hid: "10683240",
+          subCategory: "Детские песочницы",
+        },
+        {
+          hid: "17683104",
+          subCategory: "Настольные игры для взрослых",
+        },
+        {
+          hid: "15697659",
+          subCategory: "Средства для ухода за стиральными машинами",
+        },
+        {
+          hid: "16559522",
+          subCategory: "Гофрированные трубы и отводы для унитазов",
+        },
+        {
+          hid: "419820",
+          subCategory: "Книги по управлению персоналом",
+        },
+        {
+          hid: "1001393",
+          subCategory: "Приборы для ухода за телом",
+        },
+        {
+          hid: "14230210",
+          subCategory:
+            "Фильтры, влагоотделители и лубрикаторы для пневмоинструмента",
+        },
+        {
+          hid: "13314877",
+          subCategory: "Зубные щетки",
+        },
+        {
+          hid: "90862",
+          subCategory: "Классическая литература",
+        },
+        {
+          hid: "90407",
+          subCategory: "Автомобильные антенны",
+        },
+        {
+          hid: "12385944",
+          subCategory: "Отопительные котлы",
+        },
+        {
+          hid: "10683232",
+          subCategory: "Детские качели",
+        },
+        {
+          hid: "6498837",
+          subCategory: "Алкотестеры",
+        },
+        {
+          hid: "90408",
+          subCategory: "Автомобильные усилители",
+        },
+        {
+          hid: "15756919",
+          subCategory:
+            "Антибиотики, противомикробные и противопаразитарные средства",
+        },
+        {
+          hid: "13709733",
+          subCategory: "Пастель и мелки для рисования",
+        },
+        {
+          hid: "91113",
+          subCategory: "Графические планшеты",
+        },
+        {
+          hid: "91039",
+          subCategory: "Блоки питания для ноутбуков и планшетов",
+        },
+        {
+          hid: "91408",
+          subCategory: "Выпечка и сдоба",
+        },
+        {
+          hid: "90707",
+          subCategory: "Ножницы",
+        },
+        {
+          hid: "10989821",
+          subCategory: "Валики и ёмкости",
+        },
+        {
+          hid: "16265387",
+          subCategory: "Аксессуары для наушников и гарнитур",
+        },
+        {
+          hid: "90744",
+          subCategory: "Ножи канцелярские",
+        },
+        {
+          hid: "16274069",
+          subCategory: "Модули управления для климатического оборудования",
+        },
+        {
+          hid: "90545",
+          subCategory: "Магнитолы",
+        },
+        {
+          hid: "15350596",
+          subCategory: "Средства для удаления кутикулы",
+        },
+        {
+          hid: "13792990",
+          subCategory: "Садовые пилы, ножовки и ножи",
+        },
+        {
+          hid: "15726410",
+          subCategory: "Холодный чай",
+        },
+        {
+          hid: "91352",
+          subCategory: "Соки, нектары, морсы",
+        },
+        {
+          hid: "15553892",
+          subCategory: "Умные колонки",
+        },
+        {
+          hid: "14369608",
+          subCategory: "Технические очистители для автомобилей",
+        },
+        {
+          hid: "14426253",
+          subCategory:
+            "Аксессуары для мясорубок, кухонных комбайнов, блендеров и миксеров",
+        },
+        {
+          hid: "1009482",
+          subCategory: "Медицинские шприцы, иглы",
+        },
+        {
+          hid: "15720372",
+          subCategory:
+            "Средства индивидуальной защиты ног для строительства и ремонта",
+        },
+        {
+          hid: "13858512",
+          subCategory: "Стержни, чернила для ручек",
+        },
+        {
+          hid: "14744406",
+          subCategory: "Герметики",
+        },
+        {
+          hid: "91011",
+          subCategory: "Настольные компьютеры",
+        },
+        {
+          hid: "90877",
+          subCategory: "Книги по операционным системам",
+        },
+        {
+          hid: "90544",
+          subCategory: "Музыкальные центры",
+        },
+        {
+          hid: "90966",
+          subCategory: "Книги по беременности и уходу за ребенком",
+        },
+        {
+          hid: "90673",
+          subCategory: "Стулья, табуретки",
+        },
+        {
+          hid: "10563370",
+          subCategory: "Елочные украшения",
+        },
+        {
+          hid: "90906",
+          subCategory: "Книги по гражданскому праву",
+        },
+        {
+          hid: "90985",
+          subCategory: "Книги по культурологии",
+        },
+        {
+          hid: "90986",
+          subCategory: "Книги по политологии",
+        },
+        {
+          hid: "91094",
+          subCategory: "Аксессуары для сетевого оборудования",
+        },
+        {
+          hid: "237421",
+          subCategory: "Осушители воздуха",
+        },
+        {
+          hid: "6203656",
+          subCategory: "Массажные кресла",
+        },
+        {
+          hid: "14223599",
+          subCategory: "Патроны и переходники для электроинструмента",
+        },
+        {
+          hid: "15148752",
+          subCategory: "Торцовочные пилы",
+        },
+        {
+          hid: "15625432",
+          subCategory: "Наручные часы для детей",
+        },
+        {
+          hid: "15085725",
+          subCategory: "Укулеле",
+        },
+        {
+          hid: "14256102",
+          subCategory: "Специальное питание для спортсменов",
+        },
+        {
+          hid: "14219758",
+          subCategory: "Пильные диски и переходные кольца",
+        },
+        {
+          hid: "16225165",
+          subCategory: "Вызывные панели домофонов",
+        },
+        {
+          hid: "15315708",
+          subCategory: "Пояса и трикотаж для похудения",
+        },
+        {
+          hid: "90446",
+          subCategory: "Буксировочные тросы",
+        },
+        {
+          hid: "14426509",
+          subCategory: "Пистолеты для монтажной пены",
+        },
+        {
+          hid: "90437",
+          subCategory: "Двигатели для автомобилей",
+        },
+        {
+          hid: "15626087",
+          subCategory: "Куртки и пуховики для мальчиков",
+        },
+        {
+          hid: "433018",
+          subCategory: "Солнцезащитные очки",
+        },
+        {
+          hid: "90430",
+          subCategory: "Автошампуни и пены для мойки автомобилей",
+        },
+        {
+          hid: "12463727",
+          subCategory: "Солонки, перечницы и емкости для специй",
+        },
+        {
+          hid: "15093321",
+          subCategory: "Плоскошлифовальные машины",
+        },
+        {
+          hid: "90474",
+          subCategory: "Автомобильные багажники, рейлинги и комплекты крепежа",
+        },
+        {
+          hid: "13240862",
+          subCategory: "Гели и лосьоны для укладки волос",
+        },
+        {
+          hid: "12714755",
+          subCategory: "Лежаки, домики, спальные места для кошек и собак",
+        },
+        {
+          hid: "14211277",
+          subCategory: "Полотна и пильные ленты для сабельных и ленточных пил",
+        },
+        {
+          hid: "13005962",
+          subCategory: "Перчатки медицинские",
+        },
+        {
+          hid: "14949716",
+          subCategory: "Игрушки-антистресс",
+        },
+        {
+          hid: "15043377",
+          subCategory: "Ортопедические корсеты и корректоры осанки",
+        },
+        {
+          hid: "15094565",
+          subCategory: "Полировальные машины",
+        },
+        {
+          hid: "16147796",
+          subCategory: "Пароочистители",
+        },
+        {
+          hid: "14912804",
+          subCategory: "Диски, щетки для точил",
+        },
+        {
+          hid: "90429",
+          subCategory: "Полироли и пасты для автомобилей",
+        },
+        {
+          hid: "15683458",
+          subCategory: "Токовые клещи",
+        },
+        {
+          hid: "90559",
+          subCategory: "Диктофоны и портативные рекордеры",
+        },
+        {
+          hid: "90587",
+          subCategory: "Фритюрницы",
+        },
+        {
+          hid: "90597",
+          subCategory: "Ломтерезки",
+        },
+        {
+          hid: "90728",
+          subCategory: "Уничтожители бумаг (шредеры)",
+        },
+        {
+          hid: "91031",
+          subCategory: "Видеокарты",
+        },
+        {
+          hid: "90917",
+          subCategory: "Книги о театре, кино, телевидении",
+        },
+        {
+          hid: "91096",
+          subCategory: "Системы доступа и коммуникационные сервера",
+        },
+        {
+          hid: "91470",
+          subCategory: "Портативные радиостанции",
+        },
+        {
+          hid: "91077",
+          subCategory: "Аккумуляторы для ноутбуков и планшетов",
+        },
+        {
+          hid: "91243",
+          subCategory: "Акустические гитары",
+        },
+        {
+          hid: "91248",
+          subCategory: "Синтезаторы, пианино и MIDI-клавиатуры",
+        },
+        {
+          hid: "91112",
+          subCategory: "Сканеры",
+        },
+        {
+          hid: "91279",
+          subCategory: "Шкатулки",
+        },
+        {
+          hid: "91051",
+          subCategory: "Диски, кассеты",
+        },
+        {
+          hid: "91093",
+          subCategory: "Трансиверы",
+        },
+        {
+          hid: "91520",
+          subCategory: "Спальные мешки туристические",
+        },
+        {
+          hid: "91532",
+          subCategory: "Беговые лыжи",
+        },
+        {
+          hid: "91590",
+          subCategory: "Ракетки и мячи для настольного тенниса",
+        },
+        {
+          hid: "91617",
+          subCategory: "Полотенцесушители",
+        },
+        {
+          hid: "91616",
+          subCategory: "Душевые кабины и уголки",
+        },
+        {
+          hid: "91629",
+          subCategory: "Кабелерезы",
+        },
+        {
+          hid: "91626",
+          subCategory: "Рожковые, накидные, комбинированные ключи",
+        },
+        {
+          hid: "278370",
+          subCategory: "Аксессуары для экшн-камер",
+        },
+        {
+          hid: "91656",
+          subCategory: "Строительные электроножницы",
+        },
+        {
+          hid: "142665",
+          subCategory: "Гипсокартон и листовые материалы",
+        },
+        {
+          hid: "187621",
+          subCategory: "Сумки-холодильники",
+        },
+        {
+          hid: "179659",
+          subCategory: "Декоративная посуда",
+        },
+        {
+          hid: "16897567",
+          subCategory: "Реле для умного дома",
+        },
+        {
+          hid: "91654",
+          subCategory: "Штроборезы",
+        },
+        {
+          hid: "91769",
+          subCategory: "Сканеры считывания штрих-кода",
+        },
+        {
+          hid: "469554",
+          subCategory: "Рыболовные катушки",
+        },
+        {
+          hid: "469108",
+          subCategory: "Устройства для чтения карт памяти",
+        },
+        {
+          hid: "1003105",
+          subCategory: "Комоды",
+        },
+        {
+          hid: "396899",
+          subCategory: "Гребные тренажеры",
+        },
+        {
+          hid: "6521184",
+          subCategory: "Бетономешалки и растворосмесители",
+        },
+        {
+          hid: "396900",
+          subCategory: "Эллиптические тренажеры",
+        },
+        {
+          hid: "4943489",
+          subCategory: "Теплицы и каркасы",
+        },
+        {
+          hid: "411500",
+          subCategory: "Мороженицы",
+        },
+        {
+          hid: "396902",
+          subCategory: "Гимнастические снаряды и спортивные комплексы",
+        },
+        {
+          hid: "936950",
+          subCategory: "Туристическая посуда",
+        },
+        {
+          hid: "1003093",
+          subCategory: "Кровати",
+        },
+        {
+          hid: "6519706",
+          subCategory: "Тенты и шатры туристические",
+        },
+        {
+          hid: "285249",
+          subCategory: "Тенты для автомобиля",
+        },
+        {
+          hid: "961226",
+          subCategory: "Тренировочные снаряды для бокса и единоборств",
+        },
+        {
+          hid: "766164",
+          subCategory: "Дверные звонки",
+        },
+        {
+          hid: "411499",
+          subCategory: "Яйцеварки",
+        },
+        {
+          hid: "936953",
+          subCategory: "Походная мебель",
+        },
+        {
+          hid: "281936",
+          subCategory: "Поломойные и подметальные машины",
+        },
+        {
+          hid: "987827",
+          subCategory: "Аэрогрили",
+        },
+        {
+          hid: "1005464",
+          subCategory: "Водное поло",
+        },
+        {
+          hid: "477533",
+          subCategory: "Эхолоты",
+        },
+        {
+          hid: "6206027",
+          subCategory: "Комплектующие для систем видеонаблюдения",
+        },
+        {
+          hid: "599235",
+          subCategory: "Фары для автомобилей",
+        },
+        {
+          hid: "396898",
+          subCategory: "Степперы",
+        },
+        {
+          hid: "6202341",
+          subCategory: "Аксессуары для сборных и надувных бассейнов",
+        },
+        {
+          hid: "7683820",
+          subCategory: "Контейнеры и ланч-боксы",
+        },
+        {
+          hid: "10785221",
+          subCategory: "Компьютерные и письменные столы",
+        },
+        {
+          hid: "7286125",
+          subCategory: "Мягкие диваны и кушетки",
+        },
+        {
+          hid: "10859406",
+          subCategory: "Каркасные батуты",
+        },
+        {
+          hid: "11925048",
+          subCategory: "Трубогибы",
+        },
+        {
+          hid: "7683844",
+          subCategory: "Предметы сервировки",
+        },
+        {
+          hid: "11741397",
+          subCategory: "Утеплители для двигателя, радиатора и аккумулятора",
+        },
+        {
+          hid: "9335976",
+          subCategory: "Шумоизоляция для автомобилей",
+        },
+        {
+          hid: "12494664",
+          subCategory: "Тарелки",
+        },
+        {
+          hid: "12808290",
+          subCategory: "Римские и рулонные шторы",
+        },
+        {
+          hid: "13939151",
+          subCategory: "Ремешки для умных часов",
+        },
+        {
+          hid: "12341996",
+          subCategory:
+            "Прочие инструменты для измерения расстояний, длин и углов наклона",
+        },
+        {
+          hid: "14948461",
+          subCategory: "Аксессуары для нивелиров и лазерных уровней",
+        },
+        {
+          hid: "14730895",
+          subCategory: "Перчатки для единоборств",
+        },
+        {
+          hid: "13943095",
+          subCategory: "Аксессуары для бани и сауны",
+        },
+        {
+          hid: "12473327",
+          subCategory: "Кувшины, графины и декантеры",
+        },
+        {
+          hid: "12802914",
+          subCategory: "Электрические стеклоочистители",
+        },
+        {
+          hid: "14348801",
+          subCategory: "Насадки для размешивания растворов",
+        },
+        {
+          hid: "12494798",
+          subCategory: "Подносы",
+        },
+        {
+          hid: "13792957",
+          subCategory: "Садовые компостеры",
+        },
+        {
+          hid: "14256062",
+          subCategory: "Посттренировочные комплексы для спортсменов",
+        },
+        {
+          hid: "12382295",
+          subCategory: "Моноблоки",
+        },
+        {
+          hid: "13776495",
+          subCategory: "Решетки для гриля",
+        },
+        {
+          hid: "13792995",
+          subCategory: "Черенки и ручки для садового инвентаря",
+        },
+        {
+          hid: "14193088",
+          subCategory: "Цепи и шины для электро- бензопил",
+        },
+        {
+          hid: "14193335",
+          subCategory: "Утятницы",
+        },
+        {
+          hid: "13793410",
+          subCategory: "Соединители и фитинги для систем полива",
+        },
+        {
+          hid: "14256008",
+          subCategory: "Жиросжигатели для спортсменов",
+        },
+        {
+          hid: "12807781",
+          subCategory: "Корзины, коробки и контейнеры",
+        },
+        {
+          hid: "13793419",
+          subCategory: "Системы управления поливом",
+        },
+        {
+          hid: "14727194",
+          subCategory: "Леска и ножи для триммеров",
+        },
+        {
+          hid: "12699816",
+          subCategory: "Подставки и столы для ноутбуков",
+        },
+        {
+          hid: "14352315",
+          subCategory: "Аварийные светильники",
+        },
+        {
+          hid: "12808926",
+          subCategory: "Настенные ключницы и шкафчики",
+        },
+        {
+          hid: "14213973",
+          subCategory: "Консервные ножи и закаточные машинки",
+        },
+        {
+          hid: "14420101",
+          subCategory: "Офисные подставки для ног",
+        },
+        {
+          hid: "14368689",
+          subCategory: "Воски для автомобилей",
+        },
+        {
+          hid: "13021663",
+          subCategory: "Добавки в строительные смеси и растворы",
+        },
+        {
+          hid: "14369750",
+          subCategory: "Экшн-камеры",
+        },
+        {
+          hid: "12407737",
+          subCategory: "Светодиодные ленты",
+        },
+        {
+          hid: "13212434",
+          subCategory: "Огнетушители",
+        },
+        {
+          hid: "14369113",
+          subCategory: "Уход за салоном автомобиля",
+        },
+        {
+          hid: "14947624",
+          subCategory: "Скалки",
+        },
+        {
+          hid: "15296759",
+          subCategory: "Фактурные декоративные покрытия",
+        },
+        {
+          hid: "15356810",
+          subCategory: "Электрические и бензиновые опрыскиватели",
+        },
+        {
+          hid: "15450084",
+          subCategory: "Морозильники",
+        },
+        {
+          hid: "15148591",
+          subCategory: "Ленточные пилы",
+        },
+        {
+          hid: "15356747",
+          subCategory: "Садовые ножницы и кусторезы",
+        },
+        {
+          hid: "15293580",
+          subCategory: "Проволока для сварки",
+        },
+        {
+          hid: "15311178",
+          subCategory: "Док-станции для ноутбуков",
+        },
+        {
+          hid: "15148981",
+          subCategory: "Распиловочные станки",
+        },
+        {
+          hid: "15085330",
+          subCategory: "Пневмофитинги",
+        },
+        {
+          hid: "15007415",
+          subCategory: "Газовые обогреватели",
+        },
+        {
+          hid: "15337351",
+          subCategory: "Принадлежности для плиткорезов",
+        },
+        {
+          hid: "15687765",
+          subCategory: "Вешалки настенные",
+        },
+        {
+          hid: "15772208",
+          subCategory: "Масла для садовой техники",
+        },
+        {
+          hid: "15695322",
+          subCategory: "Сантехнические, разводные ключи",
+        },
+        {
+          hid: "16042606",
+          subCategory: "Скамьи и стойки",
+        },
+        {
+          hid: "16018316",
+          subCategory: "Газовые редукторы для сварки",
+        },
+        {
+          hid: "16218176",
+          subCategory: "Тренажеры со встроенными и свободными весами",
+        },
+        {
+          hid: "16047348",
+          subCategory: "Электрические паяльники и паяльные станции",
+        },
+        {
+          hid: "15618852",
+          subCategory: "Комплектующие для радиаторов и теплых полов",
+        },
+        {
+          hid: "16224108",
+          subCategory: "Канальные вентиляторы",
+        },
+        {
+          hid: "16046787",
+          subCategory: "Гигрометры и влагомеры",
+        },
+        {
+          hid: "15695109",
+          subCategory: "Пневмостеплеры",
+        },
+        {
+          hid: "15825980",
+          subCategory:
+            "Препараты для укрепления связок и суставов для спортсменов",
+        },
+        {
+          hid: "15687312",
+          subCategory: "Строительные лестницы",
+        },
+        {
+          hid: "15618766",
+          subCategory: "Овощечистки, рыбочистки",
+        },
+        {
+          hid: "16274067",
+          subCategory: "Внешние аксессуары для климатического оборудования",
+        },
+        {
+          hid: "15726440",
+          subCategory: "Наборы садовых инструментов",
+        },
+        {
+          hid: "16010883",
+          subCategory: "Комплектующие для трек-систем и спотов",
+        },
+        {
+          hid: "15720084",
+          subCategory: "Тяпки и мотыги",
+        },
+        {
+          hid: "16612355",
+          subCategory: "Смесительные клапаны",
+        },
+        {
+          hid: "17668866",
+          subCategory: "Бодибары",
+        },
+        {
+          hid: "90980",
+          subCategory: "Книги по иностранным языкам",
+        },
+        {
+          hid: "16306122",
+          subCategory: "Фильтры механической очистки",
+        },
+        {
+          hid: "90865",
+          subCategory: "Античная литература",
+        },
+        {
+          hid: "90967",
+          subCategory: "Медицинская литература для специалистов",
+        },
+        {
+          hid: "16370843",
+          subCategory:
+            "Низковольтные устройства различного назначения и аксессуары",
+        },
+        {
+          hid: "16674778",
+          subCategory: "Губные гармошки",
+        },
+        {
+          hid: "16646196",
+          subCategory: "Магнитные угольники",
+        },
+        {
+          hid: "16646187",
+          subCategory: "Сварочные кабели",
+        },
+        {
+          hid: "90954",
+          subCategory: "Книги по автомобилям и мотоциклам",
+        },
+        {
+          hid: "16360983",
+          subCategory: "Мачете и кукри для туризма",
+        },
+        {
+          hid: "90894",
+          subCategory: "Книги по экономике",
+        },
+        {
+          hid: "90752",
+          subCategory: "Чертежные инструменты",
+        },
+        {
+          hid: "16794969",
+          subCategory: "Системы управления для котлов",
+        },
+        {
+          hid: "90979",
+          subCategory: "Учебная литература для техникумов и вузов",
+        },
+        {
+          hid: "90988",
+          subCategory: "Книги по биологии",
+        },
+        {
+          hid: "17725598",
+          subCategory: "Музыкальные диски и пластинки",
+        },
+        {
+          hid: "16742482",
+          subCategory: "Крепёж для багажа и груза",
+        },
+        {
+          hid: "90932",
+          subCategory: "Книги для домашнего мастера",
+        },
+        {
+          hid: "10683225",
+          subCategory: "Принадлежности для хранения игрушек",
+        },
+        {
+          hid: "10683251",
+          subCategory: "Детские беговелы",
+        },
+        {
+          hid: "10752690",
+          subCategory: "Постельное белье для малышей",
+        },
+        {
+          hid: "12714730",
+          subCategory: "Клетки и вольеры для домашних животных",
+        },
+        {
+          hid: "10752772",
+          subCategory: "Подушки и кресла для мам",
+        },
+        {
+          hid: "10752691",
+          subCategory: "Покрывала, подушки, одеяла для малышей",
+        },
+        {
+          hid: "13483626",
+          subCategory: "Детские веломобили",
+        },
+        {
+          hid: "13525583",
+          subCategory: "Люльки для колясок и переноски",
+        },
+        {
+          hid: "15966462",
+          subCategory: "Подставки для аквариумов и террариумов",
+        },
+        {
+          hid: "13525592",
+          subCategory: "Аксессуары для колясок и автокресел",
+        },
+        {
+          hid: "13491683",
+          subCategory: "Ворота безопасности, перегородки",
+        },
+        {
+          hid: "15450095",
+          subCategory: "Винные шкафы",
+        },
+        {
+          hid: "15774676",
+          subCategory: "Блоки автоматики для насосов",
+        },
+        {
+          hid: "14700354",
+          subCategory: "Коллекторы для систем водоснабжения и отопления",
+        },
+        {
+          hid: "15714129",
+          subCategory: "Сухари, баранки, сушки",
+        },
+        {
+          hid: "15505405",
+          subCategory: "Холсты для рисования",
+        },
+        {
+          hid: "16079330",
+          subCategory: "Монтажные ножи",
+        },
+        {
+          hid: "14910253",
+          subCategory: "Сверлильные станки",
+        },
+        {
+          hid: "12797892",
+          subCategory: "Гири для занятий спортом",
+        },
+        {
+          hid: "15967001",
+          subCategory: "Фильтры для аквариумов",
+        },
+        {
+          hid: "14458916",
+          subCategory: "Компоненты смесителей",
+        },
+        {
+          hid: "15720037",
+          subCategory: "Мука из других злаков",
+        },
+        {
+          hid: "2501051",
+          subCategory: "Шлюзы умного дома",
+        },
+        {
+          hid: "91713",
+          subCategory: "Монтажные пены и очистители монтажных пистолетов",
+        },
+        {
+          hid: "90572",
+          subCategory: "Сушильные машины",
+        },
+        {
+          hid: "90717",
+          subCategory: "Жалюзи",
+        },
+        {
+          hid: "13858514",
+          subCategory: "Карандаши чернографитные",
+        },
+        {
+          hid: "91035",
+          subCategory: "Оптические приводы",
+        },
+        {
+          hid: "15962102",
+          subCategory: "Туалеты и пеленки для собак",
+        },
+        {
+          hid: "90987",
+          subCategory: "Книги по русскому языку и литературе",
+        },
+        {
+          hid: "13041267",
+          subCategory: "Сушилки и формодержатели для обуви",
+        },
+        {
+          hid: "989044",
+          subCategory: "Пеленальные столики и доски для малышей",
+        },
+        {
+          hid: "15727884",
+          subCategory: "Паштеты рыбные консервированные",
+        },
+        {
+          hid: "91803",
+          subCategory: "Сейфы",
+        },
+        {
+          hid: "90608",
+          subCategory: "Фотоальбомы",
+        },
+        {
+          hid: "14454631",
+          subCategory: "Фасонные части воздуховодов",
+        },
+        {
+          hid: "7812196",
+          subCategory: "Брелоки и ключницы",
+        },
+        {
+          hid: "930336",
+          subCategory: "Принтеры чеков, этикеток, штрих-кода",
+        },
+        {
+          hid: "90934",
+          subCategory: "Книги по интерьеру и дизайну",
+        },
+        {
+          hid: "186461",
+          subCategory: "Аксессуары для игровых приставок",
+        },
+        {
+          hid: "7265976",
+          subCategory: "Масла и воск",
+        },
+        {
+          hid: "13238924",
+          subCategory: "База и верхнее покрытие для ногтей",
+        },
+        {
+          hid: "13445471",
+          subCategory: "Юлы для малышей",
+        },
+        {
+          hid: "2417247",
+          subCategory: "Электронные книги",
+        },
+        {
+          hid: "12718255",
+          subCategory: "Поилки и кормушки для кошек и собак, птиц",
+        },
+        {
+          hid: "1569931",
+          subCategory: "Измельчители пищевых отходов",
+        },
+        {
+          hid: "7920715",
+          subCategory: "Валенки для девочек",
+        },
+        {
+          hid: "15449848",
+          subCategory: "Встраиваемые винные шкафы",
+        },
+        {
+          hid: "14426599",
+          subCategory: "Пистолеты для клея и герметика",
+        },
+        {
+          hid: "14995044",
+          subCategory: "Гель для моделирования и наращивания ногтей",
+        },
+        {
+          hid: "15587213",
+          subCategory: "Настольные и каминные часы",
+        },
+        {
+          hid: "14230086",
+          subCategory: "Шланги для компрессоров",
+        },
+        {
+          hid: "14426144",
+          subCategory: "Крепления и кронштейны для мелкой кухонной техники",
+        },
+        {
+          hid: "15521887",
+          subCategory: "Товары для изготовления косметики",
+        },
+        {
+          hid: "15625443",
+          subCategory: "Чемоданы для детей",
+        },
+        {
+          hid: "15974913",
+          subCategory: "Нагреватели для аквариумов и террариумов",
+        },
+        {
+          hid: "15697667",
+          subCategory: "Средства для ухода за кухонной техникой",
+        },
+        {
+          hid: "16593082",
+          subCategory: "Безалкогольное пиво и вино",
+        },
+        {
+          hid: "16238027",
+          subCategory: "Комплектующие и аксессуары для квадрокоптеров",
+        },
+        {
+          hid: "15987495",
+          subCategory: "Грунты для аквариумов и террариумов",
+        },
+        {
+          hid: "12894020",
+          subCategory: "Комплекты постельного белья",
+        },
+        {
+          hid: "90438",
+          subCategory: "Прочие кузовные детали автомобилей",
+        },
+        {
+          hid: "90469",
+          subCategory: "Автомобильные парковочные радары",
+        },
+        {
+          hid: "90459",
+          subCategory: "Автосигнализации",
+        },
+        {
+          hid: "90554",
+          subCategory: "Аудиоусилители и ресиверы",
+        },
+        {
+          hid: "90715",
+          subCategory: "Карнизы и аксессуары для штор",
+        },
+        {
+          hid: "91012",
+          subCategory: "Серверы",
+        },
+        {
+          hid: "91306",
+          subCategory: "Сувенирные ножи и аксессуары",
+        },
+        {
+          hid: "91577",
+          subCategory: "Скейтборды и лонгборды",
+        },
+        {
+          hid: "91606",
+          subCategory: "Строительные растворители",
+        },
+        {
+          hid: "91702",
+          subCategory: "Электропредохранители",
+        },
+        {
+          hid: "91622",
+          subCategory: "Ручки дверные",
+        },
+        {
+          hid: "91701",
+          subCategory: "Счетчики электроэнергии",
+        },
+        {
+          hid: "91776",
+          subCategory: "Инкассация и опломбирование",
+        },
+        {
+          hid: "278424",
+          subCategory: "Напильники и надфили",
+        },
+        {
+          hid: "294653",
+          subCategory: "Аксессуары для пневмоинструмента",
+        },
+        {
+          hid: "278425",
+          subCategory: "Ручные рубанки",
+        },
+        {
+          hid: "277646",
+          subCategory: "Телескопы",
+        },
+        {
+          hid: "278430",
+          subCategory: "Зубила и кернеры",
+        },
+        {
+          hid: "434515",
+          subCategory: "Грузоподъемное оборудование",
+        },
+        {
+          hid: "658841",
+          subCategory: "Антисептики для дерева",
+        },
+        {
+          hid: "638257",
+          subCategory: "Микроскопы",
+        },
+        {
+          hid: "994004",
+          subCategory: "Светофильтры для фототехники",
+        },
+        {
+          hid: "2134459",
+          subCategory: "Системы защиты от протечек воды",
+        },
+        {
+          hid: "4955914",
+          subCategory: "Автомобильные бортовые компьютеры",
+        },
+        {
+          hid: "6042233",
+          subCategory: "Сетевые хранилища (NAS)",
+        },
+        {
+          hid: "6144280",
+          subCategory: "Оборудование для автосервисов",
+        },
+        {
+          hid: "11911273",
+          subCategory: "Наматрасники и чехлы для матрасов",
+        },
+        {
+          hid: "12341944",
+          subCategory: "Прочие измерительные инструменты",
+        },
+        {
+          hid: "5110759",
+          subCategory: "Интерьерные наклейки",
+        },
+        {
+          hid: "6122737",
+          subCategory: "Автомобильные FM-трансмиттеры",
+        },
+        {
+          hid: "5017483",
+          subCategory: "Грили, барбекю, коптильни",
+        },
+        {
+          hid: "6516122",
+          subCategory: "Стилусы",
+        },
+        {
+          hid: "12341951",
+          subCategory: "Строительные линейки и угольники",
+        },
+        {
+          hid: "6169283",
+          subCategory: "Комплектующие для унитазов и писсуаров",
+        },
+        {
+          hid: "7312341",
+          subCategory: "Измельчители садового мусора",
+        },
+        {
+          hid: "10983253",
+          subCategory: "Программы",
+        },
+        {
+          hid: "7707222",
+          subCategory: "Верстаки",
+        },
+        {
+          hid: "12341979",
+          subCategory: "Строительные угломеры и уклономеры",
+        },
+        {
+          hid: "12557426",
+          subCategory: "Комплектующие для мебели",
+        },
+        {
+          hid: "13041570",
+          subCategory: "Такелаж",
+        },
+        {
+          hid: "13776188",
+          subCategory: "Химические средства для водоемов",
+        },
+        {
+          hid: "13062140",
+          subCategory: "Самогонные аппараты",
+        },
+        {
+          hid: "12943735",
+          subCategory: "Стекломои, скребки, сгоны",
+        },
+        {
+          hid: "13792974",
+          subCategory: "Вилы",
+        },
+        {
+          hid: "13793703",
+          subCategory: "Аксессуары для рассады",
+        },
+        {
+          hid: "12807805",
+          subCategory: "Органайзеры и кофры для одежды и обуви",
+        },
+        {
+          hid: "13790310",
+          subCategory: "Дровоколы",
+        },
+        {
+          hid: "12943728",
+          subCategory: "Веники, совки, щетки для пола",
+        },
+        {
+          hid: "13778201",
+          subCategory: "Тенты и подстилки для бассейнов",
+        },
+        {
+          hid: "13873140",
+          subCategory: "Бочки, кадки, жбаны",
+        },
+        {
+          hid: "13467141",
+          subCategory: "Газовые баллоны",
+        },
+        {
+          hid: "14246028",
+          subCategory: "Ножницы кухонные",
+        },
+        {
+          hid: "14222997",
+          subCategory: "Замки для велосипедов",
+        },
+        {
+          hid: "14698788",
+          subCategory: "Фоторамки",
+        },
+        {
+          hid: "14256034",
+          subCategory: "Предтренировочные комплексы для спортсменов",
+        },
+        {
+          hid: "14256128",
+          subCategory: "Тестостероновые бустеры для спортсменов",
+        },
+        {
+          hid: "14454266",
+          subCategory: "Вентиляционные установки",
+        },
+        {
+          hid: "14295737",
+          subCategory: "Аксессуары",
+        },
+        {
+          hid: "14247424",
+          subCategory: "Креатин для спортсменов",
+        },
+        {
+          hid: "14369455",
+          subCategory: "Наборы и герметики для ремонта шин автомобилей",
+        },
+        {
+          hid: "14415429",
+          subCategory: "Сумки и ящики для охоты и рыбалки",
+        },
+        {
+          hid: "14420866",
+          subCategory: "Малярные кисти",
+        },
+        {
+          hid: "14808441",
+          subCategory: "Аксессуары для контакторов и реле",
+        },
+        {
+          hid: "14979737",
+          subCategory: "Металлоискатели",
+        },
+        {
+          hid: "15632704",
+          subCategory: "Защитные пленки и стекла для планшетов",
+        },
+        {
+          hid: "14825481",
+          subCategory: "Насосные группы",
+        },
+        {
+          hid: "14804908",
+          subCategory: "Инверсионные столы",
+        },
+        {
+          hid: "15449277",
+          subCategory: "Встраиваемые морозильники",
+        },
+        {
+          hid: "14912966",
+          subCategory: "Установки для алмазного бурения",
+        },
+        {
+          hid: "15760831",
+          subCategory: "Коллекторные шкафы",
+        },
+        {
+          hid: "15695076",
+          subCategory: "Пневмошуруповерты",
+        },
+        {
+          hid: "15695083",
+          subCategory: "Пневмолобзики и пилы",
+        },
+        {
+          hid: "16054410",
+          subCategory: "Пояса",
+        },
+        {
+          hid: "16214136",
+          subCategory: "Таймеры и реле времени",
+        },
+        {
+          hid: "16046815",
+          subCategory: "Анемометры и балометры",
+        },
+        {
+          hid: "16214063",
+          subCategory: "Пускатели",
+        },
+        {
+          hid: "15695121",
+          subCategory: "Пневмозаклепочники",
+        },
+        {
+          hid: "15706151",
+          subCategory: "Пневмодрели",
+        },
+        {
+          hid: "16213871",
+          subCategory: "Устройства защиты от импульсных перенапряжений",
+        },
+        {
+          hid: "16018293",
+          subCategory: "Горелки MIG и MAG для сварки",
+        },
+        {
+          hid: "16225753",
+          subCategory: "Датчики утечки газа",
+        },
+        {
+          hid: "15720347",
+          subCategory:
+            "Средства индивидуальной защиты рук для строительства и ремонта",
+        },
+        {
+          hid: "15756109",
+          subCategory: "Арматура для сливных бачков унитазов",
+        },
+        {
+          hid: "16225728",
+          subCategory: "Датчики протечки воды",
+        },
+        {
+          hid: "16079678",
+          subCategory: "Плодосборники",
+        },
+        {
+          hid: "16224971",
+          subCategory: "Трансформаторы, драйверы, блоки питания",
+        },
+        {
+          hid: "16333947",
+          subCategory: "Поручни для ванн",
+        },
+        {
+          hid: "16571392",
+          subCategory: "Резьбонарезной инструмент для труб",
+        },
+        {
+          hid: "16612301",
+          subCategory: "Обратные клапаны",
+        },
+        {
+          hid: "17654849",
+          subCategory: "Вибротрамбовки",
+        },
+        {
+          hid: "16356279",
+          subCategory: "Датчики давления в шинах",
+        },
+        {
+          hid: "16430888",
+          subCategory: "Инструменты для нанесения строительных смесей",
+        },
+        {
+          hid: "16444502",
+          subCategory: "Краны для холодной воды",
+        },
+        {
+          hid: "16420696",
+          subCategory: "Строительные очистители",
+        },
+        {
+          hid: "17295965",
+          subCategory: "Мини-бары",
+        },
+        {
+          hid: "90727",
+          subCategory: "Брошюровщики",
+        },
+        {
+          hid: "10682562",
+          subCategory: "Транспорт для кукол",
+        },
+        {
+          hid: "90981",
+          subCategory: "Книги по экологии",
+        },
+        {
+          hid: "90890",
+          subCategory: "Книги по менеджменту",
+        },
+        {
+          hid: "989392",
+          subCategory: "Книги по военной технике и оружию",
+        },
+        {
+          hid: "166068",
+          subCategory: "Колесные диски",
+        },
+        {
+          hid: "13626477",
+          subCategory: "Наборы для шитья",
+        },
+        {
+          hid: "14990285",
+          subCategory: "Средства для ухода за бородой и усами",
+        },
+        {
+          hid: "13858925",
+          subCategory: "Школьные глобусы",
+        },
+        {
+          hid: "454909",
+          subCategory: "Биотуалеты",
+        },
+        {
+          hid: "91346",
+          subCategory: "Жевательная резинка",
+        },
+        {
+          hid: "91330",
+          subCategory: "Батончики мюсли",
+        },
+        {
+          hid: "982439",
+          subCategory: "Молоко",
+        },
+        {
+          hid: "15756581",
+          subCategory: "Средства для борьбы с вредными привычками",
+        },
+        {
+          hid: "14698852",
+          subCategory: "Отруби и клетчатка",
+        },
+        {
+          hid: "16224985",
+          subCategory: "Кабельные розетки и вилки",
+        },
+        {
+          hid: "15720054",
+          subCategory: "Гречневая крупа",
+        },
+        {
+          hid: "15967023",
+          subCategory: "Помпы для аквариумов",
+        },
+        {
+          hid: "15488750",
+          subCategory: "Аксессуары для видеокамер",
+        },
+        {
+          hid: "434516",
+          subCategory: "Прочие станки",
+        },
+        {
+          hid: "14910293",
+          subCategory: "Токарные станки",
+        },
+        {
+          hid: "13858284",
+          subCategory: "Блокноты",
+        },
+        {
+          hid: "14910462",
+          subCategory: "Ленточнопильные станки",
+        },
+        {
+          hid: "15055432",
+          subCategory: "Стяжки и наливные полы",
+        },
+        {
+          hid: "4967967",
+          subCategory: "Цемент",
+        },
+        {
+          hid: "16656975",
+          subCategory: "Холодильные шкафы",
+        },
+        {
+          hid: "454910",
+          subCategory: "Автомобильные холодильники",
+        },
+        {
+          hid: "8478954",
+          subCategory: "Средства для снятия лака",
+        },
+        {
+          hid: "16066641",
+          subCategory: "Гиперэкстензии",
+        },
+        {
+          hid: "90947",
+          subCategory: "Справочные издания",
+        },
+        {
+          hid: "90996",
+          subCategory: "Книги по педагогике",
+        },
+        {
+          hid: "90972",
+          subCategory: "Книги по ветеринарии",
+        },
+        {
+          hid: "90893",
+          subCategory: "Книги по финансам",
+        },
+        {
+          hid: "90484",
+          subCategory: "Преобразователи ржавчины для автомобилей",
+        },
+        {
+          hid: "90955",
+          subCategory: "Книги по авиации и космонавтике",
+        },
+        {
+          hid: "14995020",
+          subCategory: "Жидкости для маникюра",
+        },
+        {
+          hid: "13985019",
+          subCategory: "Упаковочные материалы",
+        },
+        {
+          hid: "13520621",
+          subCategory: "Столовые приборы для малышей",
+        },
+        {
+          hid: "13360776",
+          subCategory: "Детские напитки",
+        },
+        {
+          hid: "90915",
+          subCategory: "Книги по архитектуре и зодчеству",
+        },
+        {
+          hid: "90984",
+          subCategory: "Книги по математике",
+        },
+        {
+          hid: "1009491",
+          subCategory: "Массажные столы и стулья",
+        },
+        {
+          hid: "6077297",
+          subCategory: "Одежда и обувь для животных",
+        },
+        {
+          hid: "7959699",
+          subCategory: "Головные уборы для малышей",
+        },
+        {
+          hid: "8495423",
+          subCategory: "Комбинезоны для мальчиков",
+        },
+        {
+          hid: "13458064",
+          subCategory: "Насадки и наборы для электроинструмента",
+        },
+        {
+          hid: "13792293",
+          subCategory: "Жидкости и наполнители для биотуалетов",
+        },
+        {
+          hid: "15756921",
+          subCategory: "Вакцины, сыворотки, фаги, токсины",
+        },
+        {
+          hid: "16060456",
+          subCategory: "Ролики для пресса",
+        },
+        {
+          hid: "16454108",
+          subCategory: "Клетки и домики для грызунов, кроликов, хорьков",
+        },
+        {
+          hid: "17995119",
+          subCategory: "Коммутационные панели и компоненты",
+        },
+        {
+          hid: "91029",
+          subCategory: "3G/4G LTE и ADSL модемы",
+        },
+        {
+          hid: "91543",
+          subCategory: "Коньки",
+        },
+        {
+          hid: "6374343",
+          subCategory: "Концертное и трансляционное аудиооборудование",
+        },
+        {
+          hid: "9283442",
+          subCategory: "3D-принтеры",
+        },
+        {
+          hid: "12609084",
+          subCategory: "Полки",
+        },
+        {
+          hid: "13208041",
+          subCategory: "Автомобильные крепления для багажа",
+        },
+        {
+          hid: "13771450",
+          subCategory: "Садовые качели",
+        },
+        {
+          hid: "14727165",
+          subCategory: "Двигатели для садовой техники",
+        },
+        {
+          hid: "16046825",
+          subCategory: "Видеоскопы",
+        },
+        {
+          hid: "16657217",
+          subCategory: "Морозильное оборудование",
+        },
+        {
+          hid: "17444162",
+          subCategory: "Видеозахват",
+        },
+        {
+          hid: "6290271",
+          subCategory: "BDSM атрибутика",
+        },
+        {
+          hid: "13041154",
+          subCategory: "Аксессуары для стирки белья",
+        },
+        {
+          hid: "13483029",
+          subCategory: "Диапроекторы и диафильмы",
+        },
+        {
+          hid: "13778105",
+          subCategory: "Шарики для сухих бассейнов",
+        },
+        {
+          hid: "15714708",
+          subCategory: "Смеси из орехов и сухофруктов",
+        },
+        {
+          hid: "13858515",
+          subCategory: "Механические карандаши и грифели",
+        },
+        {
+          hid: "7812199",
+          subCategory: "Обложки для документов",
+        },
+        {
+          hid: "15510336",
+          subCategory: "Товары для росписи предметов",
+        },
+        {
+          hid: "91267",
+          subCategory: "Зонты",
+        },
+        {
+          hid: "13482742",
+          subCategory: "Наборы полицейского и шпиона",
+        },
+        {
+          hid: "91572",
+          subCategory: "Ледянки",
+        },
+        {
+          hid: "7774311",
+          subCategory: "Грим",
+        },
+        {
+          hid: "90741",
+          subCategory: "Скотч",
+        },
+        {
+          hid: "91299",
+          subCategory: "Подарочная упаковка",
+        },
+        {
+          hid: "6290261",
+          subCategory: "Интимная косметика и парфюмерия",
+        },
+        {
+          hid: "91345",
+          subCategory: "Мед и продукты пчеловодства",
+        },
+        {
+          hid: "15727888",
+          subCategory: "Маслины, оливки, каперсы консервированные",
+        },
+        {
+          hid: "15509697",
+          subCategory: "Вспомогательные жидкости для рисования",
+        },
+        {
+          hid: "15525025",
+          subCategory: "Картины из пайеток",
+        },
+        {
+          hid: "15826025",
+          subCategory: "Рамки для картин",
+        },
+        {
+          hid: "16732592",
+          subCategory: "Барабанные палочки, щетки, руты",
+        },
+        {
+          hid: "922144",
+          subCategory: "Карнавальные костюмы и аксессуары для праздника",
+        },
+        {
+          hid: "12718366",
+          subCategory: "Игрушки и декор для животных, птиц и грызунов",
+        },
+        {
+          hid: "13626601",
+          subCategory: "Лак и клей для декупажа",
+        },
+        {
+          hid: "16345063",
+          subCategory: "Эротические боди, комбинезоны для женщин",
+        },
+        {
+          hid: "16650233",
+          subCategory: "Гаджеты и изделия для сна",
+        },
+        {
+          hid: "989395",
+          subCategory: "Книги по торговле",
+        },
+        {
+          hid: "5151017",
+          subCategory: "Воздушные шары",
+        },
+        {
+          hid: "10470556",
+          subCategory: "Накопители подгузников",
+        },
+        {
+          hid: "14732443",
+          subCategory: "Дорожные аксессуары",
+        },
+        {
+          hid: "18601530",
+          subCategory: "Стики",
+        },
+        {
+          hid: "10885740",
+          subCategory: "Школьные пеналы",
+        },
+        {
+          hid: "13625748",
+          subCategory: "Наборы для вязания",
+        },
+        {
+          hid: "91387",
+          subCategory: "Грибы",
+        },
+        {
+          hid: "91069",
+          subCategory: "Аксессуары для принтеров и МФУ",
+        },
+        {
+          hid: "15720387",
+          subCategory:
+            "Средства индивидуальной защиты органов зрения для строительства и ремонта",
+        },
+        {
+          hid: "14231372",
+          subCategory: "Шлифовальные круги",
+        },
+        {
+          hid: "14368837",
+          subCategory: "Масла для смазки цепей электро- бензопил",
+        },
+        {
+          hid: "989393",
+          subCategory: "Книги о красоте и здоровье",
+        },
+        {
+          hid: "15687801",
+          subCategory: "Вешалки-плечики для одежды",
+        },
+        {
+          hid: "15714731",
+          subCategory: "Цикорий",
+        },
+        {
+          hid: "15727954",
+          subCategory: "Томатная паста",
+        },
+        {
+          hid: "91524",
+          subCategory: "Велотренажеры",
+        },
+        {
+          hid: "6290276",
+          subCategory: "Игры, книги, журналы эротического содержания",
+        },
+        {
+          hid: "14993459",
+          subCategory: "Заколки для волос",
+        },
+        {
+          hid: "90483",
+          subCategory: "Клеи и герметики для ремонта автомобилей",
+        },
+        {
+          hid: "1001664",
+          subCategory: "Книги о любви и эротике",
+        },
+        {
+          hid: "90876",
+          subCategory: "Книги по интернету и локальным сетям",
+        },
+        {
+          hid: "966823",
+          subCategory:
+            "Комплектующие и аксессуары для машинок и радиоуправляемых моделей",
+        },
+        {
+          hid: "1009487",
+          subCategory: "Глюкометры и анализаторы крови",
+        },
+        {
+          hid: "1009489",
+          subCategory: "Пульсометры и шагомеры",
+        },
+        {
+          hid: "4017798",
+          subCategory: "Игровые столы",
+        },
+        {
+          hid: "14421805",
+          subCategory: "Принадлежности для суши",
+        },
+        {
+          hid: "15092067",
+          subCategory: "Изолента",
+        },
+        {
+          hid: "16142518",
+          subCategory: "Клетки для птиц",
+        },
+        {
+          hid: "91670",
+          subCategory: "Комплектующие для строительных труб",
+        },
+        {
+          hid: "12359854",
+          subCategory: "Комплектующие и аксессуары для светильников",
+        },
+        {
+          hid: "12576716",
+          subCategory: "Прочие комплектующие для ванн",
+        },
+        {
+          hid: "15695136",
+          subCategory: "Наборы пневмоинструментов",
+        },
+        {
+          hid: "15721749",
+          subCategory: "Инструменты для точных работ",
+        },
+        {
+          hid: "15869579",
+          subCategory: "Изолирующие зажимы, наконечники, клеммы",
+        },
+        {
+          hid: "90989",
+          subCategory: "Книги по самообразованию",
+        },
+        {
+          hid: "294661",
+          subCategory: "GPS-навигаторы",
+        },
+        {
+          hid: "6206018",
+          subCategory: "Готовые комплекты видеонаблюдения",
+        },
+        {
+          hid: "14222539",
+          subCategory: "Фонари для велосипедов",
+        },
+        {
+          hid: "15756589",
+          subCategory: "Средства для лечения зубов и полости рта",
+        },
+        {
+          hid: "90871",
+          subCategory: "Книги по компьютерной графике, дизайну, CAD",
+        },
+        {
+          hid: "90873",
+          subCategory: "Книги по программированию в интернете",
+        },
+        {
+          hid: "91593",
+          subCategory: "Столы для настольного тенниса",
+        },
+        {
+          hid: "469547",
+          subCategory: "Приманки и мормышки для рыбалки",
+        },
+        {
+          hid: "4976530",
+          subCategory: "Лупы",
+        },
+        {
+          hid: "7812087",
+          subCategory: "Домашняя одежда для девочек",
+        },
+        {
+          hid: "12251838",
+          subCategory: "Аппараты для контактной сварки",
+        },
+        {
+          hid: "13430397",
+          subCategory: "Автомобильные разветвители прикуривателя",
+        },
+        {
+          hid: "15756915",
+          subCategory: "Системные гормональные препараты",
+        },
+        {
+          hid: "16762959",
+          subCategory: "Контрольно-кассовая техника",
+        },
+        {
+          hid: "10818844",
+          subCategory: "Декоративные подушки",
+        },
+        {
+          hid: "7812081",
+          subCategory: "Свитеры и кардиганы для девочек",
+        },
+        {
+          hid: "7812048",
+          subCategory: "Комбинезоны для малышей",
+        },
+        {
+          hid: "1634396",
+          subCategory: "Браслеты",
+        },
+        {
+          hid: "16345156",
+          subCategory: "Эротическая одежда, костюмы для женщин",
+        },
+        {
+          hid: "90475",
+          subCategory: "Ароматизаторы салона автомобиля",
+        },
+        {
+          hid: "17701428",
+          subCategory: "Резинометаллические шарниры",
+        },
+        {
+          hid: "13488215",
+          subCategory: "Тюбинги",
+        },
+        {
+          hid: "7812177",
+          subCategory: "Мужские трусы",
+        },
+        {
+          hid: "14222377",
+          subCategory: "Компьютеры для велосипедов",
+        },
+        {
+          hid: "989033",
+          subCategory: "Нагрудники и слюнявчики",
+        },
+        {
+          hid: "8468823",
+          subCategory: "Боди для малышей",
+        },
+        {
+          hid: "91007",
+          subCategory: "Открытки",
+        },
+        {
+          hid: "16344944",
+          subCategory: "Эротические трусы для женщин",
+        },
+        {
+          hid: "7812200",
+          subCategory: "Кошельки",
+        },
+        {
+          hid: "7812074",
+          subCategory: "Футболки и майки для девочек",
+        },
+        {
+          hid: "13525587",
+          subCategory: "Базы для автокресел",
+        },
+        {
+          hid: "13491544",
+          subCategory: "Расчески и щетки для малышей",
+        },
+        {
+          hid: "7812097",
+          subCategory: "Футболки и майки для мальчиков",
+        },
+        {
+          hid: "7812119",
+          subCategory: "Домашняя одежда для мальчиков",
+        },
+        {
+          hid: "7959202",
+          subCategory: "Домашняя одежда для малышей",
+        },
+        {
+          hid: "7848519",
+          subCategory: "Крестильная одежда для малышей",
+        },
+        {
+          hid: "15626160",
+          subCategory: "Куртки и пуховики для девочек",
+        },
+        {
+          hid: "7812113",
+          subCategory: "Свитеры и кардиганы для мальчиков",
+        },
+        {
+          hid: "7812053",
+          subCategory: "Брюки и шорты для малышей",
+        },
+        {
+          hid: "14335073",
+          subCategory: "Клатчи",
+        },
+        {
+          hid: "14368693",
+          subCategory: "Антигравий для кузова автомобиля",
+        },
+        {
+          hid: "14879737",
+          subCategory: "Детские носки",
+        },
+        {
+          hid: "17308672",
+          subCategory: "Бутылки для напитков",
+        },
+        {
+          hid: "15626392",
+          subCategory: "Теплые комбинезоны для малышей",
+        },
+        {
+          hid: "90740",
+          subCategory: "Конверты",
+        },
+        {
+          hid: "278335",
+          subCategory: "Статуэтки и фигурки",
+        },
+        {
+          hid: "7812198",
+          subCategory: "Визитницы и кредитницы",
+        },
+        {
+          hid: "14734226",
+          subCategory: "Насосы для подкачки шин",
+        },
+        {
+          hid: "13792611",
+          subCategory: "Парники и дуги",
+        },
+        {
+          hid: "7815026",
+          subCategory: "Кроссовки и кеды для девочек",
+        },
+        {
+          hid: "7812073",
+          subCategory: "Платья и сарафаны для девочек",
+        },
+        {
+          hid: "12501736",
+          subCategory: "Кухонные рукавицы, фартуки и прихватки",
+        },
+        {
+          hid: "13488366",
+          subCategory: "Детские наборы в песочницу",
+        },
+        {
+          hid: "17333127",
+          subCategory: "Ограничители открывания для дверей и окон",
+        },
+        {
+          hid: "90440",
+          subCategory: "Автомобильная электрика",
+        },
+        {
+          hid: "7812075",
+          subCategory: "Брюки для девочек",
+        },
+        {
+          hid: "13858263",
+          subCategory: "Мешки для обуви и формы",
+        },
+        {
+          hid: "16747104",
+          subCategory: "Одноразовая одежда и материалы",
+        },
+        {
+          hid: "289014",
+          subCategory: "Прочие элементы тюнинга автомобиля",
+        },
+        {
+          hid: "7812848",
+          subCategory: "Детские спортивные брюки",
+        },
+        {
+          hid: "15714184",
+          subCategory: "Мини-инструменты для обработки почвы",
+        },
+        {
+          hid: "16430954",
+          subCategory: "Строительные правила",
+        },
+        {
+          hid: "14420909",
+          subCategory: "Кабельные стяжки",
+        },
+        {
+          hid: "18003606",
+          subCategory: "Насадки для строительных фенов",
+        },
+        {
+          hid: "7814955",
+          subCategory: "Детское термобелье",
+        },
+        {
+          hid: "13771497",
+          subCategory: "Садовые скамейки",
+        },
+        {
+          hid: "7815023",
+          subCategory: "Ботинки для девочек",
+        },
+        {
+          hid: "91630",
+          subCategory: "Отвертки",
+        },
+        {
+          hid: "7815038",
+          subCategory: "Кроссовки и кеды для мальчиков",
+        },
+        {
+          hid: "7920819",
+          subCategory: "Портфели",
+        },
+        {
+          hid: "7812079",
+          subCategory: "Толстовки для девочек",
+        },
+        {
+          hid: "12894028",
+          subCategory: "Пододеяльники",
+        },
+        {
+          hid: "13803506",
+          subCategory: "Садовые кресла и стулья",
+        },
+        {
+          hid: "91807",
+          subCategory: "Комплектующие к замкам",
+        },
+        {
+          hid: "13776641",
+          subCategory: "Инструменты для приготовления барбекю",
+        },
+        {
+          hid: "14223539",
+          subCategory: "Биты для электроинструмента",
+        },
+        {
+          hid: "6395084",
+          subCategory: "Аксессуары для оптических приборов",
+        },
+        {
+          hid: "13208057",
+          subCategory: "Колпаки на автомобильные колеса",
+        },
+        {
+          hid: "15626083",
+          subCategory: "Комплекты верхней одежды для мальчиков",
+        },
+        {
+          hid: "15626131",
+          subCategory: "Комплекты верхней одежды для девочек",
+        },
+        {
+          hid: "8268515",
+          subCategory: "Детские спортивные костюмы",
+        },
+        {
+          hid: "7815018",
+          subCategory: "Обувь для малышей",
+        },
+        {
+          hid: "7812067",
+          subCategory: "Юбки для девочек",
+        },
+        {
+          hid: "14730919",
+          subCategory: "Снарядные перчатки",
+        },
+        {
+          hid: "7812106",
+          subCategory: "Джинсы для мальчиков",
+        },
+        {
+          hid: "7812078",
+          subCategory: "Джинсы для девочек",
+        },
+        {
+          hid: "13771570",
+          subCategory: "Лежаки и шезлонги",
+        },
+        {
+          hid: "12638069",
+          subCategory: "Пуфики",
+        },
+        {
+          hid: "7812108",
+          subCategory: "Толстовки для мальчиков",
+        },
+        {
+          hid: "91156",
+          subCategory:
+            "Аккумуляторы и зарядные устройства для фото- и видеотехники",
+        },
+        {
+          hid: "15524469",
+          subCategory: "Декоративные держатели для книг и журналов",
+        },
+        {
+          hid: "7812099",
+          subCategory: "Брюки для мальчиков",
+        },
+        {
+          hid: "278349",
+          subCategory: "Стойки и кольца для баскетбола",
+        },
+        {
+          hid: "91100",
+          subCategory: "Конвертеры интерфейсов и скоростей",
+        },
+        {
+          hid: "15626379",
+          subCategory: "Комплекты верхней одежды для малышей",
+        },
+        {
+          hid: "14231299",
+          subCategory: "Шлифовальные листы для шлифмашин",
+        },
+        {
+          hid: "18022709",
+          subCategory: "Бытовые стерилизаторы",
+        },
+        {
+          hid: "17513214",
+          subCategory: "Дорожные курвиметры",
+        },
+        {
+          hid: "16399165",
+          subCategory: "Труборезы",
+        },
+        {
+          hid: "16126792",
+          subCategory: "Блоки управления для фильтров",
+        },
+        {
+          hid: "91108",
+          subCategory: "Оборудование для аудио- и видеоконференций",
+        },
+        {
+          hid: "13792992",
+          subCategory: "Аксессуары для садовых работ",
+        },
+        {
+          hid: "1634399",
+          subCategory: "Колье",
+        },
+        {
+          hid: "12249113",
+          subCategory: "Другие аксессуары для сварки",
+        },
+        {
+          hid: "8257358",
+          subCategory: "Раскладушки",
+        },
+        {
+          hid: "14369216",
+          subCategory: "Очистители для автостекол",
+        },
+        {
+          hid: "13870550",
+          subCategory: "Садовые души",
+        },
+        {
+          hid: "142666",
+          subCategory: "Профиль и аксессуары для гипсокартона",
+        },
+        {
+          hid: "987142",
+          subCategory: "Книги по коллекционированию",
+        },
+        {
+          hid: "14369538",
+          subCategory: "Клеи и наборы для вклейки автостекол",
+        },
+        {
+          hid: "14231336",
+          subCategory: "Шлифовальные ленты для ленточных шлифмашин",
+        },
+        {
+          hid: "91327",
+          subCategory: "Соль",
+        },
+        {
+          hid: "4640526",
+          subCategory: "Автотрансформаторы",
+        },
+        {
+          hid: "14368679",
+          subCategory: "Принадлежности для мойки автомобилей",
+        },
+        {
+          hid: "13526449",
+          subCategory: "Ростомеры для детей",
+        },
+        {
+          hid: "90457",
+          subCategory: "Механические блокираторы для автомобиля",
+        },
+        {
+          hid: "15625430",
+          subCategory: "Зонты для детей",
+        },
+        {
+          hid: "90431",
+          subCategory: "Очистители кузова автомобилей",
+        },
+        {
+          hid: "13798039",
+          subCategory: "Аксессуары для грилей и мангалов",
+        },
+        {
+          hid: "7812052",
+          subCategory: "Джемперы и толстовки для малышей",
+        },
+        {
+          hid: "15687345",
+          subCategory: "Вышки-туры, строительные леса и подмости",
+        },
+        {
+          hid: "7812043",
+          subCategory: "Комплекты одежды для малышей",
+        },
+        {
+          hid: "15688306",
+          subCategory: "Стеллажи для мастерской",
+        },
+        {
+          hid: "14424089",
+          subCategory: "Чистящие принадлежности для оптики",
+        },
+        {
+          hid: "16453870",
+          subCategory: "Инструментальные тележки",
+        },
+        {
+          hid: "15696577",
+          subCategory: "Шлифнасадки и аксессуары",
+        },
+        {
+          hid: "7812065",
+          subCategory: "Рубашки и блузы для девочек",
+        },
+        {
+          hid: "16053642",
+          subCategory: "Обручи",
+        },
+        {
+          hid: "13120303",
+          subCategory: "Слуховые аппараты",
+        },
+        {
+          hid: "10434122",
+          subCategory: "Строительные вибраторы",
+        },
+        {
+          hid: "90567",
+          subCategory: "Напольные весы",
+        },
+        {
+          hid: "543487",
+          subCategory: "Новогодние искусственные елки",
+        },
+        {
+          hid: "987260",
+          subCategory: "Художественная литература для детей",
+        },
+        {
+          hid: "15685787",
+          subCategory: "Корма для собак",
+        },
+        {
+          hid: "15685457",
+          subCategory: "Корма для кошек",
+        },
+        {
+          hid: "12766642",
+          subCategory: "Наполнители для кошачьих туалетов",
+        },
+        {
+          hid: "15368134",
+          subCategory: "Кофе в капсулах",
+        },
+        {
+          hid: "15708154",
+          subCategory: "Учебные пособия для детей",
+        },
+        {
+          hid: "13792965",
+          subCategory: "Грабли",
+        },
+        {
+          hid: "278341",
+          subCategory: "Аксессуары для пылесосов",
+        },
+        {
+          hid: "10790730",
+          subCategory: "Обучающие материалы и авторские методики для детей",
+        },
+        {
+          hid: "4854062",
+          subCategory: "Маски и сыворотки для волос",
+        },
+        {
+          hid: "91032",
+          subCategory: "Карты флэш-памяти",
+        },
+        {
+          hid: "90799",
+          subCategory: "Подгузники для малышей",
+        },
+        {
+          hid: "12500946",
+          subCategory: "Наборы посуды для готовки",
+        },
+        {
+          hid: "15714122",
+          subCategory: "Печенье, крекер",
+        },
+        {
+          hid: "91167",
+          subCategory: "Дезодоранты для женщин",
+        },
+        {
+          hid: "8476099",
+          subCategory: "Кремы и сыворотки",
+        },
+        {
+          hid: "15720045",
+          subCategory: "Смеси для супов и гарниров",
+        },
+        {
+          hid: "91700",
+          subCategory: "Розетки, выключатели и рамки",
+        },
+        {
+          hid: "90711",
+          subCategory: "Настольные лампы и светильники",
+        },
+        {
+          hid: "10470548",
+          subCategory: "Конструкторы",
+        },
+        {
+          hid: "16331664",
+          subCategory: "Растительные напитки",
+        },
+        {
+          hid: "91329",
+          subCategory: "Макароны",
+        },
+        {
+          hid: "12342078",
+          subCategory: "Электроизмерительные мультиметры и тестеры",
+        },
+        {
+          hid: "14375087",
+          subCategory: "Чернила, тонеры, фотобарабаны для оргтехники",
+        },
+        {
+          hid: "14994526",
+          subCategory: "Пена, соль, масло для ванны",
+        },
+        {
+          hid: "91342",
+          subCategory: "Пряники, вафли",
+        },
+        {
+          hid: "14706137",
+          subCategory: "Мармелад",
+        },
+        {
+          hid: "91768",
+          subCategory: "Этикет-пистолеты",
+        },
+        {
+          hid: "90942",
+          subCategory: "Книги по уходу за ребенком",
+        },
+        {
+          hid: "15720056",
+          subCategory: "Бобовые",
+        },
+        {
+          hid: "91004",
+          subCategory: "Книги по эзотерике",
+        },
+        {
+          hid: "90855",
+          subCategory: "Юмористическая и сатиристическая литература",
+        },
+        {
+          hid: "818955",
+          subCategory: "Лекарственные растения",
+        },
+        {
+          hid: "91005",
+          subCategory: "Книги по астрологии, гороскопы, гаданиям",
+        },
+        {
+          hid: "10682647",
+          subCategory: "Настольные игры",
+        },
+        {
+          hid: "14234999",
+          subCategory: "Буры, долота, пики  для перфораторов",
+        },
+        {
+          hid: "10682550",
+          subCategory: "Куклы и пупсы",
+        },
+        {
+          hid: "13887809",
+          subCategory: "Шахматы, шашки, нарды",
+        },
+        {
+          hid: "90528",
+          subCategory: "Пластыри бактерицидные и фиксирующие",
+        },
+        {
+          hid: "15296735",
+          subCategory: "Электроды для сварки",
+        },
+        {
+          hid: "15775089",
+          subCategory: "Замки навесные",
+        },
+        {
+          hid: "90925",
+          subCategory: "Познавательная литература",
+        },
+        {
+          hid: "10790731",
+          subCategory: "Детские наборы для исследований",
+        },
+        {
+          hid: "10682610",
+          subCategory: "Мягкие игрушки",
+        },
+        {
+          hid: "91042",
+          subCategory: "Картриджи для оргтехники",
+        },
+        {
+          hid: "13360751",
+          subCategory: "Молочные смеси",
+        },
+        {
+          hid: "10792924",
+          subCategory: "Пластилин и масса для лепки",
+        },
+        {
+          hid: "10682668",
+          subCategory: "Детские наборы инструментов",
+        },
+        {
+          hid: "13196790",
+          subCategory: "Средства для посудомоечных машин",
+        },
+        {
+          hid: "14137194",
+          subCategory: "Электрические грили и шашлычницы",
+        },
+        {
+          hid: "10470551",
+          subCategory: "Пеленки и клеенки для малышей",
+        },
+        {
+          hid: "90555",
+          subCategory: "Наушники и Bluetooth-гарнитуры",
+        },
+        {
+          hid: "989024",
+          subCategory: "Средства для купания малышей",
+        },
+        {
+          hid: "13041429",
+          subCategory: "Гели и жидкие средства для стирки",
+        },
+        {
+          hid: "91184",
+          subCategory: "Бальзамы, ополаскиватели и кондиционеры для волос",
+        },
+        {
+          hid: "91183",
+          subCategory: "Шампуни для волос",
+        },
+        {
+          hid: "91075",
+          subCategory: "Коврики для мыши",
+        },
+        {
+          hid: "14994593",
+          subCategory: "Мужские бритвы и лезвия",
+        },
+        {
+          hid: "13041512",
+          subCategory: "Средства для мебели, ковров и напольных покрытий",
+        },
+        {
+          hid: "512743",
+          subCategory: "Детские автокресла",
+        },
+        {
+          hid: "90688",
+          subCategory: "Стиральный порошок",
+        },
+        {
+          hid: "90560",
+          subCategory: "Портативные цифровые плееры",
+        },
+        {
+          hid: "13475138",
+          subCategory: "Хранение грудного молока",
+        },
+        {
+          hid: "90698",
+          subCategory: "Сковороды и сотейники",
+        },
+        {
+          hid: "91392",
+          subCategory: "Чай",
+        },
+        {
+          hid: "15726400",
+          subCategory: "Вода",
+        },
+        {
+          hid: "91335",
+          subCategory: "Растительное масло",
+        },
+        {
+          hid: "91712",
+          subCategory: "Строительные затирки",
+        },
+        {
+          hid: "13475238",
+          subCategory: "Влажные салфетки для малышей",
+        },
+        {
+          hid: "6496840",
+          subCategory: "Сушилки для белья",
+        },
+        {
+          hid: "16044387",
+          subCategory: "Молотый кофе",
+        },
+        {
+          hid: "90592",
+          subCategory: "Кухонные весы",
+        },
+        {
+          hid: "8476100",
+          subCategory: "Средства для тонизирования кожи лица",
+        },
+        {
+          hid: "8476098",
+          subCategory: "Средства для очищения и снятия макияжа",
+        },
+        {
+          hid: "14989652",
+          subCategory: "Туалетное и жидкое мыло",
+        },
+        {
+          hid: "14695400",
+          subCategory: "Интимные смазки",
+        },
+        {
+          hid: "543488",
+          subCategory: "Новогодний декор",
+        },
+        {
+          hid: "13334231",
+          subCategory: "Зубная паста",
+        },
+        {
+          hid: "15714671",
+          subCategory: "Чипсы",
+        },
+        {
+          hid: "12718332",
+          subCategory: "Лакомства для собак",
+        },
+        {
+          hid: "15963668",
+          subCategory: "Лакомства для кошек",
+        },
+        {
+          hid: "278374",
+          subCategory: "Электрические зубные щетки",
+        },
+        {
+          hid: "91340",
+          subCategory: "Торты, пирожные, бисквиты, коржи",
+        },
+        {
+          hid: "288003",
+          subCategory: "USB Flash drive",
+        },
+        {
+          hid: "13239527",
+          subCategory: "Мусс и пенка для укладки волос",
+        },
+        {
+          hid: "13239503",
+          subCategory: "Лаки и спреи для укладки волос",
+        },
+        {
+          hid: "90626",
+          subCategory: "Батарейки и аккумуляторы для аудио- и видеотехники",
+        },
+        {
+          hid: "7811933",
+          subCategory: "Женские колготки и чулки",
+        },
+        {
+          hid: "91332",
+          subCategory: "Сахар",
+        },
+        {
+          hid: "818944",
+          subCategory: "Сахарозаменители",
+        },
+        {
+          hid: "13858703",
+          subCategory: "Степлеры, скобы, антистеплеры",
+        },
+        {
+          hid: "15927546",
+          subCategory: "Парфюмерия",
+        },
+        {
+          hid: "16339727",
+          subCategory: "Анальные стимуляторы",
+        },
+        {
+          hid: "6943877",
+          subCategory: "Мешки для мусора",
+        },
+        {
+          hid: "4748057",
+          subCategory: "Губная помада",
+        },
+        {
+          hid: "4852773",
+          subCategory: "Средства по уходу за кожей рук",
+        },
+        {
+          hid: "90690",
+          subCategory: "Средства против насекомых",
+        },
+        {
+          hid: "91179",
+          subCategory: "Женские средства для депиляции",
+        },
+        {
+          hid: "13625933",
+          subCategory: "Мыльная основа, краситель и отдушка для мыловарения",
+        },
+        {
+          hid: "91699",
+          subCategory: "Автоматические выключатели",
+        },
+        {
+          hid: "8476101",
+          subCategory: "Средства для ухода за кожей вокруг глаз",
+        },
+        {
+          hid: "15587647",
+          subCategory: "Переходники, вилки и колодки",
+        },
+        {
+          hid: "13239477",
+          subCategory: "Краска для волос",
+        },
+        {
+          hid: "8353924",
+          subCategory: "Универсальные внешние аккумуляторы",
+        },
+        {
+          hid: "10682597",
+          subCategory: "Игрушечное оружие и бластеры",
+        },
+        {
+          hid: "13626115",
+          subCategory: "Краски для рисования",
+        },
+        {
+          hid: "13792953",
+          subCategory: "Садовые тележки и тачки",
+        },
+        {
+          hid: "13858705",
+          subCategory: "Файлы и папки",
+        },
+        {
+          hid: "12494574",
+          subCategory: "Кружки, чашки, блюдца и пары",
+        },
+        {
+          hid: "91610",
+          subCategory: "Смесители",
+        },
+        {
+          hid: "16612191",
+          subCategory: "Краны шаровые",
+        },
+        {
+          hid: "17879971",
+          subCategory: "Разметочный инструмент",
+        },
+        {
+          hid: "14333188",
+          subCategory: "Мыши",
+        },
+        {
+          hid: "10752732",
+          subCategory: "Ванночки для малышей",
+        },
+        {
+          hid: "10770560",
+          subCategory: "Игрушки для развития мелкой моторики",
+        },
+        {
+          hid: "15092199",
+          subCategory: "Ленточные шлифовальные машины",
+        },
+        {
+          hid: "90582",
+          subCategory: "Фильтры и умягчители для воды",
+        },
+        {
+          hid: "91611",
+          subCategory: "Ванны",
+        },
+        {
+          hid: "13518990",
+          subCategory: "Средства от блох и клещей для кошек и собак",
+        },
+        {
+          hid: "13360738",
+          subCategory: "Детские каши",
+        },
+        {
+          hid: "90689",
+          subCategory: "Освежители воздуха",
+        },
+        {
+          hid: "13480462",
+          subCategory: "Кукольный театр",
+        },
+        {
+          hid: "7969496",
+          subCategory: "Термопаста",
+        },
+        {
+          hid: "14223099",
+          subCategory:
+            "Пилки и наборы для электролобзиков и лобзиковых станков",
+        },
+        {
+          hid: "7683677",
+          subCategory: "Аксессуары для зубных щеток и ирригаторов",
+        },
+        {
+          hid: "15714135",
+          subCategory: "Конфеты, карамель, леденцы",
+        },
+        {
+          hid: "15714102",
+          subCategory: "Шоколадные конфеты в коробках, подарочные наборы",
+        },
+        {
+          hid: "91339",
+          subCategory: "Варенье, повидло, протертые ягоды",
+        },
+        {
+          hid: "15697685",
+          subCategory: "Средства для ухода за посудомоечными машинами",
+        },
+        {
+          hid: "15756897",
+          subCategory: "Средства для лечения астмы",
+        },
+        {
+          hid: "10682641",
+          subCategory: "Мозаика для детей",
+        },
+        {
+          hid: "15694314",
+          subCategory: "Пневмогайковерты",
+        },
+        {
+          hid: "14994695",
+          subCategory: "Средства для интимной гигиены",
+        },
+        {
+          hid: "15686609",
+          subCategory: "Этнические макаронные изделия",
+        },
+        {
+          hid: "91388",
+          subCategory: "Сухофрукты",
+        },
+        {
+          hid: "8476102",
+          subCategory: "Средства для ухода за кожей губ",
+        },
+        {
+          hid: "1564517",
+          subCategory: "Сэндвичницы и приборы для выпечки",
+        },
+        {
+          hid: "15756510",
+          subCategory: "Средства для лечения сахарного диабета",
+        },
+        {
+          hid: "91343",
+          subCategory: "Зефир, пастила",
+        },
+        {
+          hid: "90713",
+          subCategory: "Лампочки",
+        },
+        {
+          hid: "10510546",
+          subCategory: "Телевизионные антенны",
+        },
+        {
+          hid: "14443644",
+          subCategory: "Фитинги для канализационных труб",
+        },
+        {
+          hid: "15701452",
+          subCategory: "Аксессуары для моек ВД",
+        },
+        {
+          hid: "12718223",
+          subCategory: "Средства для ухода и гигиены животных",
+        },
+        {
+          hid: "15147868",
+          subCategory: "Пилы сабельные и электроножовки",
+        },
+        {
+          hid: "267394",
+          subCategory: "Садовые газоны",
+        },
+        {
+          hid: "14728157",
+          subCategory: "Насосы и аксессуары для надувных изделий",
+        },
+        {
+          hid: "4922764",
+          subCategory: "Ветеринарные препараты",
+        },
+        {
+          hid: "13520477",
+          subCategory: "Пустышки и аксессуары",
+        },
+        {
+          hid: "15727473",
+          subCategory: "Паштеты мясные консервированные",
+        },
+        {
+          hid: "15720395",
+          subCategory: "Молочные консервы",
+        },
+        {
+          hid: "15521478",
+          subCategory: "Алмазная вышивка",
+        },
+        {
+          hid: "10683227",
+          subCategory: "Игровые наборы и фигурки для детей",
+        },
+        {
+          hid: "90976",
+          subCategory: "Учебная литература для школы",
+        },
+        {
+          hid: "10682497",
+          subCategory: "Книжки-игрушки",
+        },
+        {
+          hid: "15557928",
+          subCategory: "Супы, бульоны и заправки ",
+        },
+        {
+          hid: "90924",
+          subCategory: "Книги для малышей",
+        },
+        {
+          hid: "15720051",
+          subCategory: "Рисовая крупа",
+        },
+        {
+          hid: "15727878",
+          subCategory: "Консервы из рыбы и морепродуктов",
+        },
+        {
+          hid: "90854",
+          subCategory: "Детективная литература, боевики, триллеры",
+        },
+        {
+          hid: "90895",
+          subCategory: "Книги по банковскому делу",
+        },
+        {
+          hid: "14405299",
+          subCategory: "Лампы для автомобилей",
+        },
+        {
+          hid: "16089018",
+          subCategory: "Средства народной медицины",
+        },
+        {
+          hid: "90853",
+          subCategory: "Зарубежная проза и поэзия",
+        },
+        {
+          hid: "91430",
+          subCategory: "Хлебцы, сухарики",
+        },
+        {
+          hid: "8480736",
+          subCategory: "Детская косметика и духи",
+        },
+        {
+          hid: "15140556",
+          subCategory: "Строительный скотч",
+        },
+        {
+          hid: "12499689",
+          subCategory: "Миски и дуршлаги",
+        },
+        {
+          hid: "15756910",
+          subCategory: "Средства для поддержания здоровья мочеполовой системы",
+        },
+        {
+          hid: "90971",
+          subCategory: "Книги по психологии",
+        },
+        {
+          hid: "15509728",
+          subCategory: "Наборы для рисования",
+        },
+        {
+          hid: "90994",
+          subCategory: "Книги по социологии",
+        },
+        {
+          hid: "90927",
+          subCategory: "Книги с играми для детей",
+        },
+        {
+          hid: "7719197",
+          subCategory: "Сифоны и трапы",
+        },
+        {
+          hid: "90787",
+          subCategory: "Пазлы",
+        },
+        {
+          hid: "91405",
+          subCategory: "Хлеб, лаваши, лепешки",
+        },
+        {
+          hid: "278373",
+          subCategory: "Машинки для стрижки волос и триммеры",
+        },
+        {
+          hid: "15448926",
+          subCategory: "Электро- и бензопилы цепные",
+        },
+        {
+          hid: "10682592",
+          subCategory: "Игрушечные машинки и техника",
+        },
+        {
+          hid: "294652",
+          subCategory: "Воздушные компрессоры",
+        },
+        {
+          hid: "14996686",
+          subCategory: "BB, CC и DD кремы",
+        },
+        {
+          hid: "13792630",
+          subCategory: "Субстраты, грунты, мульча",
+        },
+        {
+          hid: "90586",
+          subCategory: "Электрочайники и термопоты",
+        },
+        {
+          hid: "13041431",
+          subCategory: "Средства для мытья посуды",
+        },
+        {
+          hid: "91660",
+          subCategory: "Электрорубанки",
+        },
+        {
+          hid: "91176",
+          subCategory: "Средства для душа",
+        },
+        {
+          hid: "13488213",
+          subCategory: "Санки и аксессуары",
+        },
+        {
+          hid: "90796",
+          subCategory: "Детские коляски",
+        },
+        {
+          hid: "13041460",
+          subCategory: "Чистящие средства для кафеля, сантехники и труб",
+        },
+        {
+          hid: "13041507",
+          subCategory: "Средства для чистки кухонных поверхностей",
+        },
+        {
+          hid: "1031249",
+          subCategory: "Надувная мебель",
+        },
+        {
+          hid: "90589",
+          subCategory: "Кофеварки и кофемашины",
+        },
+        {
+          hid: "90702",
+          subCategory: "Разделочные доски",
+        },
+        {
+          hid: "91650",
+          subCategory: "Шуруповерты",
+        },
+        {
+          hid: "16336734",
+          subCategory: "Фены и фен-щётки",
+        },
+        {
+          hid: "91076",
+          subCategory: "Сумки и чехлы для ноутбуков",
+        },
+        {
+          hid: "16336768",
+          subCategory: "Щипцы, плойки и выпрямители",
+        },
+        {
+          hid: "5037939",
+          subCategory:
+            "Картриджи и сменные элементы для бытовых водоочистителей",
+        },
+        {
+          hid: "765280",
+          subCategory: "Блендеры",
+        },
+        {
+          hid: "13491643",
+          subCategory: "Гигиена полости рта для детей",
+        },
+        {
+          hid: "91503",
+          subCategory: "Зарядные устройства и адаптеры для мобильных телефонов",
+        },
+        {
+          hid: "13314855",
+          subCategory: "Гигиенические прокладки и тампоны",
+        },
+        {
+          hid: "13041430",
+          subCategory: "Кондиционеры и ополаскиватели для белья",
+        },
+        {
+          hid: "4684840",
+          subCategory: "Веб-камеры",
+        },
+        {
+          hid: "8476097",
+          subCategory: "Маски для лица",
+        },
+        {
+          hid: "16011796",
+          subCategory: "Шоколадные батончики",
+        },
+        {
+          hid: "16044416",
+          subCategory: "Растворимый кофе",
+        },
+        {
+          hid: "91074",
+          subCategory: "Компьютерные кабели, разъемы, переходники",
+        },
+        {
+          hid: "8475955",
+          subCategory: "Кремы и лосьоны для тела",
+        },
+        {
+          hid: "91180",
+          subCategory: "Средства до и после депиляции",
+        },
+        {
+          hid: "8476539",
+          subCategory: "Скрабы и пилинги для лица",
+        },
+        {
+          hid: "13357269",
+          subCategory: "Женские бритвы и лезвия",
+        },
+        {
+          hid: "15726412",
+          subCategory: "Холодный кофе",
+        },
+        {
+          hid: "13239550",
+          subCategory: "Воск и паста для укладки волос",
+        },
+        {
+          hid: "12943708",
+          subCategory: "Швабры и насадки",
+        },
+        {
+          hid: "8480722",
+          subCategory: "Мужские средства для бритья",
+        },
+        {
+          hid: "14960839",
+          subCategory: "Игры для приставок и ПК",
+        },
+        {
+          hid: "91422",
+          subCategory: "Уксус",
+        },
+        {
+          hid: "90701",
+          subCategory: "Термосы и термокружки",
+        },
+        {
+          hid: "90577",
+          subCategory: "Обогреватели",
+        },
+        {
+          hid: "14995755",
+          subCategory: "Влажные салфетки",
+        },
+        {
+          hid: "90670",
+          subCategory: "Скатерти и салфетки",
+        },
+        {
+          hid: "15971367",
+          subCategory: "Корма для рыб и рептилий",
+        },
+        {
+          hid: "12501046",
+          subCategory: "Терки и механические измельчители",
+        },
+        {
+          hid: "14245867",
+          subCategory: "Ножи кухонные",
+        },
+        {
+          hid: "15002303",
+          subCategory: "Туалетная бумага и бумажные полотенца",
+        },
+        {
+          hid: "14947854",
+          subCategory: "Пельменницы, машинки для пасты и равиоли",
+        },
+        {
+          hid: "8480713",
+          subCategory: "Средства по уходу за лицом для мужчин",
+        },
+        {
+          hid: "12499575",
+          subCategory: "Кастрюли и ковши",
+        },
+        {
+          hid: "14995788",
+          subCategory: "Тушь и гель для бровей",
+        },
+        {
+          hid: "14996659",
+          subCategory: "Хайлайтеры и скульптурирующие средства",
+        },
+        {
+          hid: "4748066",
+          subCategory: "Контур для глаз",
+        },
+        {
+          hid: "90703",
+          subCategory: "Турки, кофеварки, кофемолки",
+        },
+        {
+          hid: "90691",
+          subCategory: "Отбеливатели и пятновыводители",
+        },
+        {
+          hid: "14993540",
+          subCategory: "Оттеночные и камуфлирующие средства для волос",
+        },
+        {
+          hid: "818945",
+          subCategory: "Эфирные масла",
+        },
+        {
+          hid: "90523",
+          subCategory: "Компрессионный трикотаж",
+        },
+        {
+          hid: "2561869",
+          subCategory: "Аэрозольная краска",
+        },
+        {
+          hid: "8480754",
+          subCategory: "Корректоры и консилеры для лица",
+        },
+        {
+          hid: "90797",
+          subCategory: "Бутылочки и ниблеры для малышей",
+        },
+        {
+          hid: "91427",
+          subCategory: "Комплексы и продукты для похудения",
+        },
+        {
+          hid: "90565",
+          subCategory: "Вентиляторы бытовые",
+        },
+        {
+          hid: "13276667",
+          subCategory: "Тональные средства для лица",
+        },
+        {
+          hid: "2724669",
+          subCategory: "Портативная акустика",
+        },
+        {
+          hid: "15727944",
+          subCategory: "Грибы консервированные",
+        },
+        {
+          hid: "15185185",
+          subCategory: "Лечебные согревающие изделия",
+        },
+        {
+          hid: "6203658",
+          subCategory: "Гидромассажеры",
+        },
+        {
+          hid: "91599",
+          subCategory: "Строительные краски",
+        },
+        {
+          hid: "12501724",
+          subCategory: "Фольга, бумага, пакеты",
+        },
+        {
+          hid: "10498025",
+          subCategory: "Умные часы и браслеты",
+        },
+        {
+          hid: "13480619",
+          subCategory: "Играем в салон красоты",
+        },
+        {
+          hid: "12367773",
+          subCategory: "Кресла-мешки",
+        },
+        {
+          hid: "4852774",
+          subCategory: "Средства по уходу за кожей ног",
+        },
+        {
+          hid: "12943705",
+          subCategory: "Тряпки, щетки, губки",
+        },
+        {
+          hid: "16011704",
+          subCategory: "Шоколадные конфеты",
+        },
+        {
+          hid: "14454485",
+          subCategory: "Воздуховоды",
+        },
+        {
+          hid: "90489",
+          subCategory: "Смазки для автомобилей",
+        },
+        {
+          hid: "90468",
+          subCategory: "Автомобильные щетки и скребки",
+        },
+        {
+          hid: "10682491",
+          subCategory: "Развивающие коврики для малышей",
+        },
+        {
+          hid: "14808696",
+          subCategory: "Игрушки на радиоуправлении",
+        },
+        {
+          hid: "10682618",
+          subCategory: "Игрушечные роботы и трансформеры",
+        },
+        {
+          hid: "6856242",
+          subCategory: "Зарядные и пуско-зарядные устройства для аккумуляторов",
+        },
+        {
+          hid: "7812207",
+          subCategory: "Чемоданы",
+        },
+        {
+          hid: "13373756",
+          subCategory: "Автомобильные инверторы",
+        },
+        {
+          hid: "13491604",
+          subCategory: "Маникюрные принадлежности для малышей",
+        },
+        {
+          hid: "91498",
+          subCategory: "Чехлы для мобильных телефонов",
+        },
+        {
+          hid: "6159024",
+          subCategory: "Детские трехколесные велосипеды",
+        },
+        {
+          hid: "191214",
+          subCategory: "Демонстрационные доски",
+        },
+        {
+          hid: "13858516",
+          subCategory: "Маркеры",
+        },
+        {
+          hid: "7693914",
+          subCategory: "Ватные палочки и диски",
+        },
+        {
+          hid: "91667",
+          subCategory: "Водопроводные трубы",
+        },
+        {
+          hid: "90518",
+          subCategory: "Дезинфицирующие средства",
+        },
+        {
+          hid: "6368403",
+          subCategory: "Компьютерные гарнитуры",
+        },
+        {
+          hid: "90669",
+          subCategory: "Полотенца",
+        },
+        {
+          hid: "14414114",
+          subCategory: "Ходунки, костыли и трости",
+        },
+        {
+          hid: "13858511",
+          subCategory: "Ручки письменные",
+        },
+        {
+          hid: "6203657",
+          subCategory: "Вибромассажеры",
+        },
+        {
+          hid: "10683235",
+          subCategory: "Игровые и спортивные комплексы и горки",
+        },
+        {
+          hid: "12943742",
+          subCategory: "Перчатки хозяйственные",
+        },
+        {
+          hid: "7776182",
+          subCategory: "Механические метеостанции, термометры и барометры",
+        },
+        {
+          hid: "91602",
+          subCategory: "Грунтовки",
+        },
+        {
+          hid: "18082000",
+          subCategory: "Презентеры",
+        },
+        {
+          hid: "1564518",
+          subCategory: "Одноразовая посуда",
+        },
+        {
+          hid: "14823119",
+          subCategory: "Противогололедные реагенты и материалы",
+        },
+        {
+          hid: "90616",
+          subCategory: "Сумки, кейсы, чехлы для фото- и видеотехники",
+        },
+        {
+          hid: "763072",
+          subCategory: "Электролобзики",
+        },
+        {
+          hid: "278423",
+          subCategory: "Наборы инструментов и оснастки",
+        },
+        {
+          hid: "226666",
+          subCategory: "Стабилизаторы электрического напряжения",
+        },
+        {
+          hid: "138608",
+          subCategory: "Принтеры и МФУ",
+        },
+        {
+          hid: "13482954",
+          subCategory: "Детские обучающие плакаты",
+        },
+        {
+          hid: "13239358",
+          subCategory: "Сухие и твердые шампуни для волос",
+        },
+        {
+          hid: "14621180",
+          subCategory: "Соусы",
+        },
+        {
+          hid: "14456451",
+          subCategory: "Подгузники, пеленки, трусы для больных",
+        },
+        {
+          hid: "91331",
+          subCategory: "Геркулес и хлопья",
+        },
+        {
+          hid: "90538",
+          subCategory: "Термометры",
+        },
+        {
+          hid: "90710",
+          subCategory: "Люстры и потолочные светильники",
+        },
+        {
+          hid: "10792934",
+          subCategory: "Наборы для мыловарения",
+        },
+        {
+          hid: "15618862",
+          subCategory: "Удлинители и сетевые фильтры",
+        },
+        {
+          hid: "10683226",
+          subCategory: "Сборные игрушечные модели",
+        },
+        {
+          hid: "989179",
+          subCategory: "Новогодние фигурки и сувениры",
+        },
+        {
+          hid: "91423",
+          subCategory: "Специи, приправы и пряности",
+        },
+        {
+          hid: "15720032",
+          subCategory: "Пюре и лапша быстрого приготовления",
+        },
+        {
+          hid: "658844",
+          subCategory: "Электрический теплый пол",
+        },
+        {
+          hid: "15756903",
+          subCategory: "Средства для лечения травм, болей в мышцах и суставах",
+        },
+        {
+          hid: "15756538",
+          subCategory: "Средства для лечения вен",
+        },
+        {
+          hid: "12704208",
+          subCategory: "Сено и наполнители для грызунов",
+        },
+        {
+          hid: "13458336",
+          subCategory: "Манжеты и аксессуары для тонометров",
+        },
+        {
+          hid: "10682506",
+          subCategory: "Пирамидки для малышей",
+        },
+        {
+          hid: "91382",
+          subCategory: "Орехи",
+        },
+        {
+          hid: "6203660",
+          subCategory: "Другие массажеры",
+        },
+        {
+          hid: "13482094",
+          subCategory: "Детские треки и авторалли",
+        },
+        {
+          hid: "13792961",
+          subCategory: "Лопаты",
+        },
+        {
+          hid: "6430983",
+          subCategory: "Наборы для вышивания",
+        },
+        {
+          hid: "15727468",
+          subCategory: "Консервы из мяса и субпродуктов",
+        },
+        {
+          hid: "15510954",
+          subCategory: "Угловые шлифмашинки (болгарки)",
+        },
+        {
+          hid: "12807791",
+          subCategory: "Вакуумные пакеты для хранения вещей",
+        },
+        {
+          hid: "90470",
+          subCategory: "Щетки стеклоочистителей",
+        },
+        {
+          hid: "90857",
+          subCategory: "Литература фэнтези",
+        },
+        {
+          hid: "90863",
+          subCategory: "Фантастическая литература",
+        },
+        {
+          hid: "90993",
+          subCategory: "Книги по философии",
+        },
+        {
+          hid: "90521",
+          subCategory: "Витамины и минералы",
+        },
+        {
+          hid: "7683824",
+          subCategory: "Банки для хранения продуктов",
+        },
+        {
+          hid: "90852",
+          subCategory: "Поэзия",
+        },
+        {
+          hid: "90970",
+          subCategory: "Книги по народной и нетрадиционной медицине",
+        },
+        {
+          hid: "6944162",
+          subCategory: "Сумки для инструментов",
+        },
+        {
+          hid: "12341942",
+          subCategory: "Манометры",
+        },
+        {
+          hid: "12359484",
+          subCategory: "Прожекторы",
+        },
+        {
+          hid: "13480658",
+          subCategory: "Игрушечная еда и посуда",
+        },
+        {
+          hid: "15364672",
+          subCategory: "Дидактические карточки",
+        },
+        {
+          hid: "90999",
+          subCategory: "Книги по религии",
+        },
+        {
+          hid: "90991",
+          subCategory: "Книги по истории",
+        },
+        {
+          hid: "90881",
+          subCategory: "Литература на английском языке",
+        },
+        {
+          hid: "90941",
+          subCategory: "Книги о домашних животных",
+        },
+        {
+          hid: "91311",
+          subCategory: "Масло, маргарин, спред",
+        },
+        {
+          hid: "90709",
+          subCategory: "Бра и настенные светильники",
+        },
+        {
+          hid: "15525081",
+          subCategory: "Товары для изготовления кукол и игрушек",
+        },
+        {
+          hid: "10683245",
+          subCategory: "Детские мячи и прыгуны",
+        },
+        {
+          hid: "10682496",
+          subCategory: "Погремушки и прорезыватели",
+        },
+        {
+          hid: "13626008",
+          subCategory: "Альбомы и папки для рисования и черчения",
+        },
+        {
+          hid: "294645",
+          subCategory: "Сверла и наборы",
+        },
+        {
+          hid: "989038",
+          subCategory: "Горшки и детские сиденья на унитаз",
+        },
+        {
+          hid: "4954975",
+          subCategory: "Мультиварки",
+        },
+        {
+          hid: "723087",
+          subCategory: "Сетевое оборудование Wi-Fi и Bluetooth",
+        },
+        {
+          hid: "16302537",
+          subCategory: "Вертикальные пылесосы",
+        },
+        {
+          hid: "989034",
+          subCategory: "Посуда для малышей",
+        },
+        {
+          hid: "13744375",
+          subCategory: "Презервативы",
+        },
+        {
+          hid: "16302535",
+          subCategory: "Пылесосы",
+        },
+        {
+          hid: "91161",
+          subCategory: "Эпиляторы и женские электробритвы",
+        },
+        {
+          hid: "90591",
+          subCategory: "Тостеры",
+        },
+        {
+          hid: "13022028",
+          subCategory: "Мыльницы, стаканы и дозаторы",
+        },
+        {
+          hid: "13022029",
+          subCategory: "Держатели и крючки для ванной и туалета",
+        },
+        {
+          hid: "989041",
+          subCategory: "Детские комоды",
+        },
+        {
+          hid: "989040",
+          subCategory: "Кроватки детские",
+        },
+        {
+          hid: "16312867",
+          subCategory: "Утюги",
+        },
+        {
+          hid: "12501086",
+          subCategory: "Посуда и формы для выпечки и запекания",
+        },
+        {
+          hid: "10682670",
+          subCategory: "Детские музыкальные инструменты",
+        },
+        {
+          hid: "10682511",
+          subCategory: "Неваляшки для малышей",
+        },
+        {
+          hid: "13239041",
+          subCategory: "Аппараты для маникюра и педикюра",
+        },
+        {
+          hid: "90546",
+          subCategory: "Радиоприемники",
+        },
+        {
+          hid: "91614",
+          subCategory: "Раковины, пьедесталы",
+        },
+        {
+          hid: "1009483",
+          subCategory: "Ортопедические бандажи и ортезы",
+        },
+        {
+          hid: "91173",
+          subCategory: "Бумажные салфетки и платочки",
+        },
+        {
+          hid: "14990252",
+          subCategory: "Средства для лечения и укрепления ногтей",
+        },
+        {
+          hid: "16044466",
+          subCategory: "Порционный кофе",
+        },
+        {
+          hid: "16011677",
+          subCategory: "Шоколадная плитка",
+        },
+        {
+          hid: "10682532",
+          subCategory: "Каталки и качалки для малышей",
+        },
+        {
+          hid: "13337703",
+          subCategory: "Готовые завтраки, мюсли, гранола",
+        },
+        {
+          hid: "734595",
+          subCategory: "Очистители и увлажнители воздуха",
+        },
+        {
+          hid: "13239135",
+          subCategory: "Лампы для сушки ногтей",
+        },
+        {
+          hid: "13041456",
+          subCategory: "Хозяйственное мыло",
+        },
+        {
+          hid: "13462769",
+          subCategory: "Косметика для беременных и кормящих мам",
+        },
+        {
+          hid: "91174",
+          subCategory: "Полоскание и уход за полостью рта",
+        },
+        {
+          hid: "12494740",
+          subCategory: "Блюда и салатники для сервировки",
+        },
+        {
+          hid: "4748074",
+          subCategory: "Румяна и бронзеры для лица",
+        },
+        {
+          hid: "13212408",
+          subCategory: "Корма для грызунов и хорьков",
+        },
+        {
+          hid: "8475961",
+          subCategory: "Средства для похудения и борьбы с целлюлитом",
+        },
+        {
+          hid: "13314796",
+          subCategory: "Средства и принадлежности для восковой эпиляции",
+        },
+        {
+          hid: "4748058",
+          subCategory: "Лак для ногтей",
+        },
+        {
+          hid: "16044621",
+          subCategory: "Кофе в зернах",
+        },
+        {
+          hid: "8510396",
+          subCategory: "Контур для губ",
+        },
+        {
+          hid: "12894143",
+          subCategory: "Подушки",
+        },
+        {
+          hid: "8476103",
+          subCategory: "Средства для загара и защиты от солнца для лица",
+        },
+        {
+          hid: "14995909",
+          subCategory: "Декоративная косметика для губ",
+        },
+        {
+          hid: "13276918",
+          subCategory: "Карандаши для бровей",
+        },
+        {
+          hid: "13314820",
+          subCategory: "Средства для загара и защиты от солнца для тела",
+        },
+        {
+          hid: "6290268",
+          subCategory: "Вибраторы",
+        },
+        {
+          hid: "6527202",
+          subCategory: "Аксессуары для плавания",
+        },
+        {
+          hid: "14415132",
+          subCategory: "Палки для скандинавской ходьбы и треккинговые палки",
+        },
+        {
+          hid: "16046348",
+          subCategory: "Сиденья для унитазов и биде",
+        },
+        {
+          hid: "13238898",
+          subCategory: "Гель-лак для ногтей",
+        },
+        {
+          hid: "6296079",
+          subCategory: "Симуляторы для мужчин",
+        },
+        {
+          hid: "91037",
+          subCategory: "USB-концентраторы",
+        },
+        {
+          hid: "15989012",
+          subCategory: "Аксессуары для глажения белья",
+        },
+        {
+          hid: "90603",
+          subCategory: "Прочая техника для кухни",
+        },
+        {
+          hid: "294675",
+          subCategory: "Спортивная защита",
+        },
+        {
+          hid: "16147812",
+          subCategory: "Отпариватели",
+        },
+        {
+          hid: "13858513",
+          subCategory: "Канцелярские корректоры",
+        },
+        {
+          hid: "14404075",
+          subCategory: "Ортопедические стельки",
+        },
+        {
+          hid: "90600",
+          subCategory: "Хлебопечки",
+        },
+        {
+          hid: "15525105",
+          subCategory: "Иглы для шитья и вышивания",
+        },
+        {
+          hid: "14245094",
+          subCategory: "Средства от глистов для животных",
+        },
+        {
+          hid: "16302536",
+          subCategory: "Роботы-пылесосы",
+        },
+        {
+          hid: "8480725",
+          subCategory: "Дезодоранты для мужчин",
+        },
+        {
+          hid: "16611586",
+          subCategory: "3D-ручки",
+        },
+        {
+          hid: "16309374",
+          subCategory: "Внешние жесткие диски и SSD",
+        },
+        {
+          hid: "16074648",
+          subCategory: "Питание для лечения и профилактики",
+        },
+        {
+          hid: "10682526",
+          subCategory: "Развивающие игрушки для малышей",
+        },
+        {
+          hid: "91604",
+          subCategory: "Шпатлевки",
+        },
+        {
+          hid: "13239479",
+          subCategory: "Окислители для краски",
+        },
+        {
+          hid: "16043670",
+          subCategory: "Спортивные маты",
+        },
+        {
+          hid: "10682659",
+          subCategory: "Детские компьютеры",
+        },
+        {
+          hid: "10785222",
+          subCategory: "Компьютерные кресла",
+        },
+        {
+          hid: "4748054",
+          subCategory: "Декоративная косметика для глаз",
+        },
+        {
+          hid: "13858259",
+          subCategory: "Рюкзаки и ранцы для школы",
+        },
+        {
+          hid: "15687757",
+          subCategory: "Вешалки напольные",
+        },
+        {
+          hid: "90725",
+          subCategory: "Калькуляторы",
+        },
+        {
+          hid: "91397",
+          subCategory: "Какао, горячий шоколад",
+        },
+        {
+          hid: "90747",
+          subCategory: "Ежедневники, записные книжки",
+        },
+        {
+          hid: "14193305",
+          subCategory: "Казаны, тажины",
+        },
+        {
+          hid: "91046",
+          subCategory: "Офисная бумага и пленка",
+        },
+        {
+          hid: "16579195",
+          subCategory: "Лотки для бумаги",
+        },
+        {
+          hid: "469549",
+          subCategory: "Рыболовная леска и шнуры",
+        },
+        {
+          hid: "215930",
+          subCategory: "Фейерверки",
+        },
+        {
+          hid: "13828968",
+          subCategory: "Бумага для рисования и черчения",
+        },
+        {
+          hid: "90465",
+          subCategory: "Чехлы и накидки на сиденья",
+        },
+        {
+          hid: "91603",
+          subCategory: "Колеровочные средства",
+        },
+        {
+          hid: "308016",
+          subCategory: "Автомобильная акустика",
+        },
+        {
+          hid: "90619",
+          subCategory: "Штативы и моноподы для фото- и видеокамер",
+        },
+        {
+          hid: "91612",
+          subCategory: "Унитазы",
+        },
+        {
+          hid: "14255967",
+          subCategory: "Витамины и минералы для спортсменов",
+        },
+        {
+          hid: "818965",
+          subCategory: "Кулеры и системы охлаждения для компьютеров",
+        },
+        {
+          hid: "1564519",
+          subCategory: "Гладильные доски",
+        },
+        {
+          hid: "15695094",
+          subCategory: "Пневмошлифмашины",
+        },
+        {
+          hid: "13626035",
+          subCategory: "Цветные карандаши для рисования",
+        },
+        {
+          hid: "6470214",
+          subCategory: "Аксессуары для ухода за телом",
+        },
+        {
+          hid: "15756357",
+          subCategory: "Средства для лечения гриппа и простуды",
+        },
+        {
+          hid: "15646095",
+          subCategory: "Газонокосилки",
+        },
+        {
+          hid: "12473298",
+          subCategory: "Рюмки и стопки",
+        },
+        {
+          hid: "281934",
+          subCategory: "Профессиональные пылесосы",
+        },
+        {
+          hid: "91078",
+          subCategory: "Чистящие принадлежности для компьютерной техники",
+        },
+        {
+          hid: "16133574",
+          subCategory: "Аксессуары для ухода за лицом",
+        },
+        {
+          hid: "15019493",
+          subCategory: "Воскоплавы и парафиновые ванны",
+        },
+        {
+          hid: "15756525",
+          subCategory: "Средства для лечения нервной системы",
+        },
+        {
+          hid: "15189948",
+          subCategory: "Маски и очки для сварки",
+        },
+        {
+          hid: "15727896",
+          subCategory: "Овощи консервированные",
+        },
+        {
+          hid: "13041314",
+          subCategory: "Косметика и чистящие средства для обуви",
+        },
+        {
+          hid: "14459058",
+          subCategory: "Учебные карты",
+        },
+        {
+          hid: "7692671",
+          subCategory: "Раскраски",
+        },
+        {
+          hid: "90860",
+          subCategory: "Отечественная проза",
+        },
+        {
+          hid: "15561854",
+          subCategory: "Прочие книги",
+        },
+        {
+          hid: "14201356",
+          subCategory: "Жидкость для стеклоомывателя",
+        },
+        {
+          hid: "90868",
+          subCategory: "Книги по языкам программирования",
+        },
+        {
+          hid: "6101352",
+          subCategory: "Воздушные фильтры для двигателей",
+        },
+        {
+          hid: "15756517",
+          subCategory: "Средства для лечения кожи",
+        },
+        {
+          hid: "723088",
+          subCategory: "Комплекты клавиатур и мышей",
+        },
+        {
+          hid: "15001132",
+          subCategory: "Средства для химической завивки волос",
+        },
+        {
+          hid: "10682513",
+          subCategory: "Кубики для малышей",
+        },
+        {
+          hid: "4748078",
+          subCategory: "Наборы декоративной косметики",
+        },
+        {
+          hid: "17424413",
+          subCategory: "Тормозные колодки",
+        },
+        {
+          hid: "8480738",
+          subCategory: "Косметические наборы",
+        },
+        {
+          hid: "90595",
+          subCategory: "Микроволновые печи",
+        },
+        {
+          hid: "4951523",
+          subCategory: "Настенно-потолочные светильники",
+        },
+        {
+          hid: "90861",
+          subCategory: "Биографии, мемуары, личности",
+        },
+        {
+          hid: "90442",
+          subCategory: "Масляные фильтры для автомобилей",
+        },
+        {
+          hid: "14334315",
+          subCategory: "Клавиатуры",
+        },
+        {
+          hid: "90754",
+          subCategory: "Печати и штампы",
+        },
+        {
+          hid: "7718838",
+          subCategory: "Резаки для бумаги",
+        },
+        {
+          hid: "90882",
+          subCategory: "Литература на немецком языке",
+        },
+        {
+          hid: "15845159",
+          subCategory: "Гипс для литья и лепки",
+        },
+        {
+          hid: "15221861",
+          subCategory: "Дрели и строительные миксеры",
+        },
+        {
+          hid: "6426904",
+          subCategory:
+            "Ручные садовые ножницы, секаторы, высоторезы, сучкорезы",
+        },
+        {
+          hid: "91666",
+          subCategory: "Канализационные трубы",
+        },
+        {
+          hid: "13626061",
+          subCategory: "Фломастеры и маркеры для рисования",
+        },
+        {
+          hid: "13755058",
+          subCategory: "Витражная роспись",
+        },
+        {
+          hid: "10682651",
+          subCategory: "Игровые коврики для детей",
+        },
+        {
+          hid: "13491512",
+          subCategory: "Уход за кожей малышей",
+        },
+        {
+          hid: "10752770",
+          subCategory: "Сборы в роддом",
+        },
+        {
+          hid: "90570",
+          subCategory: "Электробритвы мужские",
+        },
+        {
+          hid: "4748062",
+          subCategory: "Тушь для ресниц",
+        },
+        {
+          hid: "90533",
+          subCategory: "Контактные линзы",
+        },
+        {
+          hid: "13445445",
+          subCategory: "Сортеры для малышей",
+        },
+        {
+          hid: "14247369",
+          subCategory: "Аминокислоты и BCAA для спортсменов",
+        },
+        {
+          hid: "14989707",
+          subCategory: "Скрабы и пилинги для тела",
+        },
+        {
+          hid: "10682501",
+          subCategory: "Подвески для малышей",
+        },
+        {
+          hid: "13041511",
+          subCategory: "Средства для мытья окон и зеркал",
+        },
+        {
+          hid: "13462770",
+          subCategory: "Бандажи для беременных",
+        },
+        {
+          hid: "13858308",
+          subCategory: "Бумага для заметок",
+        },
+        {
+          hid: "10972670",
+          subCategory: "Очки виртуальной реальности",
+        },
+        {
+          hid: "16312871",
+          subCategory: "Парогенераторы",
+        },
+        {
+          hid: "989042",
+          subCategory: "Стульчики для кормления малышей",
+        },
+        {
+          hid: "90599",
+          subCategory: "Соковыжималки электрические",
+        },
+        {
+          hid: "454690",
+          subCategory: "Миостимуляторы",
+        },
+        {
+          hid: "15724921",
+          subCategory: "Вентиляторы вытяжные",
+        },
+        {
+          hid: "13276920",
+          subCategory: "Краска для бровей и ресниц",
+        },
+        {
+          hid: "13212400",
+          subCategory: "Корма для птиц",
+        },
+        {
+          hid: "13238994",
+          subCategory: "Масло для ногтей и кутикулы",
+        },
+        {
+          hid: "12499715",
+          subCategory: "Крышки и колпаки для посуды",
+        },
+        {
+          hid: "13041163",
+          subCategory: "Машинки для удаления катышков",
+        },
+        {
+          hid: "233108",
+          subCategory: "Туристические фонари и лампы",
+        },
+        {
+          hid: "16042844",
+          subCategory: "Мочалки и щетки для ванны и душа",
+        },
+        {
+          hid: "15032315",
+          subCategory: "Ножи и мультитулы для туризма",
+        },
+        {
+          hid: "15999360",
+          subCategory: "Лакомства для грызунов",
+        },
+        {
+          hid: "12894144",
+          subCategory: "Одеяла",
+        },
+        {
+          hid: "6290266",
+          subCategory: "Эротические стимуляторы",
+        },
+        {
+          hid: "15959385",
+          subCategory: "Игрушки для кошек и собак",
+        },
+        {
+          hid: "15524997",
+          subCategory: "Товары для декорирования",
+        },
+        {
+          hid: "90480",
+          subCategory: "Автомобильные антифризы",
+        },
+        {
+          hid: "12704731",
+          subCategory: "Ошейники для собак",
+        },
+        {
+          hid: "14247398",
+          subCategory: "Гейнеры для спортсменов",
+        },
+        {
+          hid: "14456486",
+          subCategory: "Гигиенические средства для ухода за больными",
+        },
+        {
+          hid: "13488571",
+          subCategory: "Головоломки",
+        },
+        {
+          hid: "12704139",
+          subCategory: "Туалеты, пеленки для кошек и собак",
+        },
+        {
+          hid: "12501719",
+          subCategory: "Подставки и держатели для посуды и аксессуаров",
+        },
+        {
+          hid: "13482185",
+          subCategory: "Детские парковки и гаражи",
+        },
+        {
+          hid: "15714106",
+          subCategory: "Шоколадная и ореховая паста",
+        },
+        {
+          hid: "605794",
+          subCategory: "Аквариумы",
+        },
+        {
+          hid: "14231579",
+          subCategory: "Диски отрезные",
+        },
+        {
+          hid: "13199892",
+          subCategory: "Автомобильные домкраты и подставки",
+        },
+        {
+          hid: "15720379",
+          subCategory:
+            "Средства индивидуальной защиты органов дыхания для строительства и ремонта",
+        },
+        {
+          hid: "7811915",
+          subCategory: "Женские трусы",
+        },
+        {
+          hid: "91502",
+          subCategory: "Автомобильные держатели для мобильных устройств",
+        },
+        {
+          hid: "1009486",
+          subCategory: "Медицинские грелки",
+        },
+        {
+          hid: "10682676",
+          subCategory: "Детские кухни и бытовая техника",
+        },
+        {
+          hid: "14296140",
+          subCategory: "Коврики для занятий йогой и фитнесом",
+        },
+        {
+          hid: "90590",
+          subCategory: "Миксеры",
+        },
+        {
+          hid: "15059602",
+          subCategory: "Клей для обоев",
+        },
+        {
+          hid: "2662954",
+          subCategory: "Чехлы для планшетов",
+        },
+        {
+          hid: "16298554",
+          subCategory: "Душевые шторки на ванну",
+        },
+        {
+          hid: "90743",
+          subCategory: "Дыроколы",
+        },
+        {
+          hid: "7812212",
+          subCategory: "Косметички и бьюти-кейсы",
+        },
+        {
+          hid: "15625452",
+          subCategory: "Карнавальные костюмы для детей",
+        },
+        {
+          hid: "6430984",
+          subCategory: "Пряжа для вязания",
+        },
+        {
+          hid: "15726408",
+          subCategory: "Энергетические напитки",
+        },
+        {
+          hid: "90548",
+          subCategory: "Акустические системы",
+        },
+        {
+          hid: "90588",
+          subCategory: "Мясорубки электрические",
+        },
+        {
+          hid: "90938",
+          subCategory: "Кулинарные книги",
+        },
+        {
+          hid: "997520",
+          subCategory: "Мини-печи",
+        },
+        {
+          hid: "2190938",
+          subCategory: "Души, душевые панели, гарнитуры",
+        },
+        {
+          hid: "4547637",
+          subCategory: "Кулеры для воды и питьевые фонтанчики",
+        },
+        {
+          hid: "4748072",
+          subCategory: "Пудра для лица",
+        },
+        {
+          hid: "6496700",
+          subCategory: "Автомобильные камеры заднего вида",
+        },
+        {
+          hid: "8278683",
+          subCategory: "Аксессуары для электробритв и эпиляторов",
+        },
+        {
+          hid: "13626237",
+          subCategory: "Доски и мольберты для рисования",
+        },
+        {
+          hid: "15687311",
+          subCategory: "Стремянки",
+        },
+        {
+          hid: "15450081",
+          subCategory: "Холодильники",
+        },
+        {
+          hid: "15756445",
+          subCategory: "Лейки для душа",
+        },
+        {
+          hid: "10682608",
+          subCategory: "Игрушечные солдатики",
+        },
+        {
+          hid: "15521886",
+          subCategory: "Питание для беременных и кормящих",
+        },
+        {
+          hid: "13793406",
+          subCategory: "Пистолеты, насадки, дождеватели для шлангов",
+        },
+        {
+          hid: "13626085",
+          subCategory: "Картины-фрески из песка для детей",
+        },
+        {
+          hid: "15756506",
+          subCategory: "Средства для лечения пищеварительной системы",
+        },
+        {
+          hid: "15756887",
+          subCategory: "Средства для лечения сердца и сосудов",
+        },
+        {
+          hid: "13887899",
+          subCategory: "Домино и лото",
+        },
+        {
+          hid: "278340",
+          subCategory: "Аксессуары для стиральных и сушильных машин",
+        },
+        {
+          hid: "16147683",
+          subCategory: "Наборы и ингредиенты для блюд этнической кухни",
+        },
+        {
+          hid: "15714680",
+          subCategory: "Снэки, закуски",
+        },
+        {
+          hid: "15756892",
+          subCategory: "Средства для лечения глаз и ушей",
+        },
+        {
+          hid: "15756513",
+          subCategory: "Средства для лечения грибка",
+        },
+        {
+          hid: "15880008",
+          subCategory: "Ручные стабилизаторы и стедикамы",
+        },
+        {
+          hid: "13061828",
+          subCategory: "Клей канцелярский",
+        },
+        {
+          hid: "12341982",
+          subCategory: "Толщиномеры",
+        },
+        {
+          hid: "15756503",
+          subCategory: "Средства для лечения боли",
+        },
+        {
+          hid: "763583",
+          subCategory: "Прочие аксессуары для климатического оборудования",
+        },
+        {
+          hid: "15714682",
+          subCategory: "Попкорн",
+        },
+        {
+          hid: "90869",
+          subCategory: "Книги по компьютерным базам данных",
+        },
+        {
+          hid: "90920",
+          subCategory: "Книги по музыке, ноты",
+        },
+        {
+          hid: "90856",
+          subCategory: "Любовный роман",
+        },
+        {
+          hid: "91627",
+          subCategory: "Молотки и кувалды",
+        },
+        {
+          hid: "17804424",
+          subCategory: "Комиксы и манга",
+        },
+        {
+          hid: "90859",
+          subCategory: "Исторический роман, приключения",
+        },
+        {
+          hid: "90977",
+          subCategory: "Книги по географии и геологии",
+        },
+        {
+          hid: "90962",
+          subCategory: "Книги по промышленности и производству",
+        },
+        {
+          hid: "13314795",
+          subCategory: "Средства и принадлежности для шугаринга",
+        },
+        {
+          hid: "15317159",
+          subCategory: "Жидкие гвозди",
+        },
+        {
+          hid: "191219",
+          subCategory: "Мультимедиа-проекторы",
+        },
+        {
+          hid: "15521912",
+          subCategory: "Наборы для изготовления свечей",
+        },
+        {
+          hid: "10752737",
+          subCategory: "Сиденья, подставки, горки для купания малышей",
+        },
+        {
+          hid: "13475285",
+          subCategory: "Присыпки и кремы под подгузник",
+        },
+        {
+          hid: "10752735",
+          subCategory: "Круги на шею для купания малышей",
+        },
+        {
+          hid: "989022",
+          subCategory: "Аксессуары для безопасности малышей",
+        },
+        {
+          hid: "14947448",
+          subCategory: "Растворы для контактных линз",
+        },
+        {
+          hid: "280280",
+          subCategory: "Радиаторы отопления",
+        },
+        {
+          hid: "12785133",
+          subCategory: "Эспандеры и кистевые тренажеры",
+        },
+        {
+          hid: "13445417",
+          subCategory: "Мобили для малышей",
+        },
+        {
+          hid: "13243353",
+          subCategory: "Расчески и щетки для волос",
+        },
+        {
+          hid: "14995813",
+          subCategory: "Тени и наборы теней для бровей",
+        },
+        {
+          hid: "4922657",
+          subCategory: "Витамины и добавки для кошек и собак",
+        },
+        {
+          hid: "13462772",
+          subCategory: "Прокладки для груди",
+        },
+        {
+          hid: "13483454",
+          subCategory: "Мочалки, губки для малышей",
+        },
+        {
+          hid: "16088924",
+          subCategory: "Поводки для собак",
+        },
+        {
+          hid: "989037",
+          subCategory: "Термометры для малышей",
+        },
+        {
+          hid: "12473293",
+          subCategory: "Бокалы и стаканы",
+        },
+        {
+          hid: "91420",
+          subCategory: "Кетчуп",
+        },
+        {
+          hid: "14419921",
+          subCategory: "Фитболы и медболы для занятий фитнесом",
+        },
+        {
+          hid: "15999143",
+          subCategory: "Лакомства для птиц",
+        },
+        {
+          hid: "15618745",
+          subCategory: "Наборы кухонных ножей",
+        },
+        {
+          hid: "13276669",
+          subCategory: "Основа и фиксаторы для макияжа",
+        },
+        {
+          hid: "16306128",
+          subCategory:
+            "Фитинги для металлопластиковых труб и труб из сшитого полиэтилена",
+        },
+        {
+          hid: "278429",
+          subCategory: "Клещи и бокорезы",
+        },
+        {
+          hid: "411498",
+          subCategory: "Блинницы",
+        },
+        {
+          hid: "13431995",
+          subCategory: "Безмены",
+        },
+        {
+          hid: "10682521",
+          subCategory: "Детские игрушки для ванной",
+        },
+        {
+          hid: "15728039",
+          subCategory: "Десертные соусы и топпинги",
+        },
+        {
+          hid: "16642686",
+          subCategory: "Инструменты парикмахера и сумки для инструмента",
+        },
+        {
+          hid: "15587458",
+          subCategory: "Настенные часы",
+        },
+        {
+          hid: "15456724",
+          subCategory: "Тепловые завесы",
+        },
+        {
+          hid: "7757500",
+          subCategory: "Топоры",
+        },
+      ];
+
+      const fastMode = fast;
+      const superFastMode = fast;
+
+      function parseOfferShowPlace(offerShowPlace) {
+        let result = {};
+
+        for (const _offerShowPlace of Object.values(offerShowPlace)) {
+          result[_offerShowPlace.showUid] = _offerShowPlace.offerId;
+        }
+        return result;
+      }
+
+      function parseOffer(offer) {
+        let result = {};
+
+        for (const _offer of Object.values(offer)) {
+          const promos = _offer.promos;
+          const bestPromo = promos
+            .filter(
+              (promo) =>
+                promo.type === "promo-code" &&
+                promo.mechanicsPaymentType === "CPA"
+            )
+            .sort(
+              (a, b) =>
+                a.itemsInfo.promoPrice.value - b.itemsInfo.promoPrice.value
+            )[0];
+          if (!bestPromo) {
+            continue;
+          }
+          const itemsInfo = bestPromo.itemsInfo;
+          result[_offer.id] = {
+            id: _offer.marketSku || _offer.productId,
+            name: _offer.titles.raw,
+            code: itemsInfo.promoCode,
+            old_price: itemsInfo.promoPrice.discount.oldMin,
+            price: itemsInfo.promoPrice.value,
+            img: _offer.pictures
+              ? _offer.pictures[0].original.url.replace("orig", "50x50")
+              : null,
+          };
+        }
+
+        return result;
+      }
+
+      function parseProduct(product) {
+        let result = { filledProducts: {}, unfilledProducts: {} };
+
+        for (const _product of Object.values(product)) {
+          let showPlaceIds = _product.showPlaceIds;
+          const min_price = _product.prices ? _product.prices.min : Infinity;
+          if (showPlaceIds) {
+            for (const showPlaceId of showPlaceIds) {
+              // if (!showPlaceId.showUid) {
+              //   console.log("WTF");
+              //   console.log(showPlaceId);
+              //   console.log(_product);
+              // }
+              result.filledProducts[showPlaceId.showUid] = {
+                product_id: _product.id,
+                uid: showPlaceId.showUid,
+                name: showPlaceId.titles.raw,
+                min_price: min_price,
+                img: showPlaceId.pictures
+                  ? showPlaceId.pictures[0].original.url.replace(
+                      "orig",
+                      "50x50"
+                    )
+                  : null,
+              };
+            }
+          } else {
+            result.unfilledProducts[_product.id] = {
+              title: _product.titles.raw,
+              min_price: min_price,
+            };
+          }
+        }
+        return result;
+      }
+
+      function parseCollections(collections) {
+        const offerShowPlaces = parseOfferShowPlace(collections.offerShowPlace);
+        const offers = parseOffer(collections.offer);
+        const products = parseProduct(collections.product);
+        // console.log(offerShowPlaces);
+        // console.log(offers);
+        // console.log(products);
+
+        let filledResult = [];
+
+        for (const productId in products.filledProducts) {
+          const product = products.filledProducts[productId];
+          const offerShowPlace = offerShowPlaces[productId];
+          const offer = offers[offerShowPlace];
+
+          if (!offer) {
+            // console.log("No offer for product");
+            // console.log(product);
+            // console.log(offerShowPlace);
+            continue;
+          }
+          if (offer.img !== product.img || offer.title !== product.title) {
+            console.log("Offer and product are different");
+            console.log(offer);
+            console.log(product);
+          }
+          filledResult.push({
+            ...product,
+            ...offer,
+          });
+        }
+
+        let unfilledResult = [];
+        for (const productId in products.unfilledProducts) {
+          unfilledResult.push({
+            product_id: productId,
+            min_price: products.unfilledProducts[productId].min_price,
+            title: products.unfilledProducts[productId].title,
+          });
+        }
+
+        return {
+          filledProducts: filledResult,
+          unfilledProducts: unfilledResult,
+        };
+      }
+
+      let globalFailedSearch = [];
+
+      async function parseSearchPageOffers(
+        hid,
+        text,
+        cpa = true,
+        withCode = true
+      ) {
+        try {
+          const res = await fetch(
+            `https://market.yandex.ru/api/search?${
+              cpa ? "cpa=1&" : ""
+            }&hid=${hid}&text=${text}&onstock=1&page=1${
+              withCode ? "&promo-type=promo-code" : ""
+            }`,
+            {
+              headers: {
+                accept: "*/*",
+                "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+                "content-type": "application/json",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-origin",
+                sk: window.state.user.sk,
+              },
+              referrer: "https://market.yandex.ru/",
+              referrerPolicy: "unsafe-url",
+              body: null,
+              method: "GET",
+              mode: "cors",
+              credentials: "include",
+            }
+          ).then((res) => res.json());
+
+          const collections = res.normalizedState.collections;
+
+          return { ...parseCollections(collections), total: res.total };
+        } catch (e) {
+          console.log(e);
+          globalFailedSearch.push(`${hid} ${text}`);
+          return { filledProducts: [], unfilledProducts: [], total: 0 };
+        }
+      }
+
+      async function parseSearchPage(hid, page = 1, how = "dprice") {
+        try {
+          const res = await fetch(
+            `https://market.yandex.ru/api/search?cpa=1&hid=${hid}&onstock=1&page=${page}&promo-type=promo-code${
+              how ? `&how=${how}` : ""
+            }`,
+            {
+              headers: {
+                accept: "*/*",
+                "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+                "content-type": "application/json",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-origin",
+                sk: window.state.user.sk,
+              },
+              referrer: "https://market.yandex.ru/",
+              referrerPolicy: "unsafe-url",
+              body: null,
+              method: "GET",
+              mode: "cors",
+              credentials: "include",
+            }
+          ).then((res) => res.json());
+
+          const collections = res.normalizedState.collections;
+
+          return { ...parseCollections(collections), total: res.total };
+        } catch (e) {
+          console.log(e);
+          globalFailedSearch.push(`${hid} ${page}`);
+
+          return { filledProducts: [], unfilledProducts: [], total: 0 };
+        }
+      }
+
+      function calcLen(products) {
+        let i = Object.keys(products).length * 100000;
+        if (superFastMode) i = 0;
+        for (const product_id in products) {
+          if (products[product_id].offer) {
+            i++;
+          }
+        }
+        return (
+          Object.keys(products.filledProducts).length * 100000 +
+          Object.keys(products.unfilledProducts).length
+        );
+      }
+
+      async function parseHid(hid) {
+        const products = { filledProducts: {}, unfilledProducts: {} };
+        let total = -1;
+        let prevProductsAmount = products.size;
+        for (const how of ["dpop", "aprice", "dprice", "rorp", "discount_p"]) {
+          console.log(how);
+          let i = 1;
+          do {
+            prevProductsAmount = calcLen(products);
+            const page = await parseSearchPage(hid, i++, how);
+            total = page.total;
+            page.filledProducts.forEach((product) => {
+              products.filledProducts[product.name] = product;
+            });
+            page.unfilledProducts.forEach((product) => {
+              products.unfilledProducts[product.product_id] = product;
+            });
+            console.log(prevProductsAmount, calcLen(products));
+          } while (
+            prevProductsAmount < calcLen(products) &&
+            Object.keys(products.filledProducts).length < total
+          );
+          if (Object.keys(products).length >= total) {
+            break;
+          }
+        }
+
+        const filledProductsKeys = Object.keys(products.filledProducts);
+        for (const filledProduct of filledProductsKeys) {
+          const product = products.filledProducts[filledProduct];
+          if (!fastMode) {
+            products.unfilledProducts[product.product_id] = {
+              title: product.name,
+              product_id: product.product_id,
+            };
+            products.filledProducts[filledProduct].min_price =
+              products.filledProducts[filledProduct].old_price;
+            products.filledProducts[filledProduct].reload = !fastMode;
+            //delete products.filledProducts[filledProduct];
+          } else if (products.unfilledProducts[product.product_id]) {
+            delete products.unfilledProducts[product.product_id];
+          }
+        }
+
+        // console.log(products);
+        return products;
+      }
+
+      async function parseAllProducts() {
+        let globalProducts = [];
+        let globalUnfilled = [];
+
+        for ({ hid, subCategory } of hids) {
+          const { filledProducts, unfilledProducts } = await parseHid(hid);
+          let firstStep = 0;
+          if (fastMode && superFastMode) {
+            firstStep = 3;
+          } else if (!fastMode) {
+            firstStep = 2;
+          }
+          for (let step = firstStep; step < 3; step++) {
+            const visitedProducts = new Set();
+            let productsToFind = null;
+            while (
+              (productsToFind = Object.keys(unfilledProducts).filter(
+                (id) => !visitedProducts.has(id)
+              )).length > 0
+            ) {
+              const productToFind = unfilledProducts[productsToFind[0]];
+              visitedProducts.add(`${productToFind.product_id}`);
+              let page = null;
+              switch (step) {
+                case 0:
+                  page = await parseSearchPageOffers(hid, productToFind.title);
+                  break;
+                case 1:
+                  page = await parseSearchPageOffers(
+                    hid,
+                    productToFind.title,
+                    false
+                  );
+                  break;
+                case 2:
+                  page = await parseSearchPageOffers(
+                    hid,
+                    productToFind.title,
+                    false,
+                    false
+                  );
+                  break;
+              }
+              page.filledProducts.forEach((product) => {
+                if (filledProducts[product.name]) {
+                  filledProducts[product.name].min_price = Math.min(
+                    product.min_price,
+                    filledProducts[product.name].min_price
+                  );
+                  filledProducts[product.name].reload = false;
+                } else {
+                  filledProducts[product.name] = product;
+                }
+              });
+              page.unfilledProducts.forEach((product) => {
+                for (const filledProduct in filledProducts) {
+                  const _filledProduct = filledProducts[filledProduct];
+                  if (
+                    _filledProduct.product_id === product.product_id &&
+                    product.min_price
+                  ) {
+                    _filledProduct.min_price = Math.min(
+                      _filledProduct.min_price,
+                      product.min_price
+                    );
+                    _filledProduct.reload = false;
+                  }
+                }
+              });
+              for (const filledProduct in filledProducts) {
+                const product = filledProducts[filledProduct];
+                if (unfilledProducts[product.product_id] && !product.reload) {
+                  delete unfilledProducts[product.product_id];
+                }
+              }
+            }
+          }
+
+          for (const filledProduct in filledProducts) {
+            globalProducts.push({
+              ...filledProducts[filledProduct],
+              price: +filledProducts[filledProduct].price,
+              old_price: +filledProducts[filledProduct].old_price,
+              min_price: +filledProducts[filledProduct].min_price,
+              category: subCategory,
+            });
+          }
+          for (const unfilledProduct in unfilledProducts) {
+            globalUnfilled.push({
+              ...unfilledProducts[unfilledProduct],
+              category: subCategory,
+            });
+          }
+        }
+        return globalProducts;
+      }
+      return await parseAllProducts();
+      ///////////////////////////////////////////////////////////////////
+    }, fast);
+    return products;
+  }
+
+  while (true) {
+    try {
+      const scanStart = Date.now();
+      const products = await parseAllProducts();
+      console.log("Finished scan");
+      const scanEnd = Date.now();
+      if (gists) {
+        gists.edit("0d5a05ba41c17876762df3b263106ab0", {
+          files: {
+            "all_products_auto.json": {
+              content: JSON.stringify({
+                scanStart,
+                scanEnd,
+                products: products,
+              }),
+            },
+          },
+        });
+      }
+      fs.writeFileSync(
+        "./products_with_timestamp.json",
+        JSON.stringify({
+          scanStart,
+          scanEnd,
+          products: products,
+        })
+      );
+      exec("npm run dev");
+      await sleep(10000);
+    } catch (e) {
+      console.log(e);
+      await sleep(10000);
+    }
+  }
+})();
