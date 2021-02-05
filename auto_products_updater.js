@@ -7080,7 +7080,11 @@ async function solveCaptcha() {
   while (true) {
     try {
       const scanStart = Date.now();
+      console.log("Started scan");
       const products = await parseAllProducts();
+      if (products.length === 0) {
+        throw "WTF";
+      }
       console.log("Finished scan");
       const scanEnd = Date.now();
       if (gists) {
@@ -7104,7 +7108,7 @@ async function solveCaptcha() {
           products: products,
         })
       );
-      exec("npm run dev");
+      exec("npm run deploy");
       await sleep(10000);
     } catch (e) {
       console.log(e);
