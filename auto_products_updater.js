@@ -99,7 +99,7 @@ async function solveCaptcha() {
       await sleep(5000);
       captchaEl = await page.$(".captcha__image img");
       console.log(solution);
-      if (captchaEl) {
+      if (!captchaEl) {
         console.log("Captcha solved!");
         await fetch(
           `http://rucaptcha.com/res.php?key=${captchaApi}&action=reportbad&id=${id}`
