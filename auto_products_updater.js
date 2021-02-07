@@ -111,6 +111,7 @@ async function solveCaptcha() {
         );
       }
     }
+    console.log("Setting up browser...");
     await sleep(5000);
     await page.evaluate(async () => {
       await fetch("https://market.yandex.ru/api/settings/region", {
