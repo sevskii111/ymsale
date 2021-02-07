@@ -29,8 +29,8 @@ if (captcha !== -1) {
   captchaApi = process.argv[captcha + 1];
 }
 
-let browserConfig = { dumpio: true, args: [] };
-
+let browserConfig = { args: [] };
+// dumpio: true,
 if (debug) {
   browserConfig.headless = false;
   browserConfig.args.push(
