@@ -62,6 +62,7 @@ async function solveCaptcha() {
   ).match(/\d+/)[0];
 
   let solution;
+  await sleep(1000);
 
   while (!solution) {
     const res = await fetch(
