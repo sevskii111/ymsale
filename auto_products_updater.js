@@ -16,7 +16,7 @@ const logs = process.argv.indexOf("--logs") !== -1;
 const gist = process.argv.indexOf("--gist");
 let gists = null;
 
-if (gist) {
+if (gist !== -1) {
   const gistApi = process.argv[gist + 1];
   gists = new Gists({
     token: gistApi,
