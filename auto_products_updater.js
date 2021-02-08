@@ -11,6 +11,8 @@ function sleep(ms) {
 
 const fast = process.argv.indexOf("--fast") !== -1;
 
+const logs = process.argv.indexOf("--logs") !== -1;
+
 const gist = process.argv.indexOf("--gist");
 let gists = null;
 
@@ -31,6 +33,11 @@ if (captcha !== -1) {
 
 let browserConfig = { args: [] };
 // dumpio: true,
+
+if (logs) {
+  browserConfig["dumpio"] = true;
+}
+
 if (debug) {
   browserConfig.headless = false;
   browserConfig.args.push(
