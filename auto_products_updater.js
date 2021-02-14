@@ -587,7 +587,7 @@ async function solveCaptcha() {
           products: products,
         })
       );
-      //exec("npm run deploy");
+      exec("npm run deploy");
       await sleep(10000);
     } catch (e) {
       console.log(e);
