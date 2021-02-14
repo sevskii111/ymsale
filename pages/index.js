@@ -419,6 +419,7 @@ export async function getStaticProps(context) {
   const hids = require("../hids");
   const hidToSubCategroyMap = {};
   for (const hid of hids) {
+    unknowHids.delete(parseInt(hid.hid));
     hidToSubCategroyMap[hid.hid] = hid.subCategory;
   }
 
