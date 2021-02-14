@@ -444,13 +444,13 @@ export async function getStaticProps(context) {
     }
     codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      // uniqueProducts[product.id] = {
-      //   ...product,
-      //   real_discount:
-      //     product.min_price < product.old_price
-      //       ? product.min_price - product.price
-      //       : "?",
-      // };
+      uniqueProducts[product.id] = {
+        ...product,
+        real_discount:
+          product.min_price < product.old_price
+            ? product.min_price - product.price
+            : "?",
+      };
     } else {
       uniqueProducts[product.id].real_discount =
         product.min_price < uniqueProducts[product.id].old_price
