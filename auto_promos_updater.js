@@ -2,7 +2,7 @@ const fs = require("fs");
 const puppeteer = require("puppeteer");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
-const shopPromoIds = require("./shopPromoIds.json");
+let shopPromoIds;
 const { exec } = require("child_process");
 
 function sleep(ms) {
@@ -348,6 +348,7 @@ async function solveCaptcha() {
 
   while (true) {
     try {
+      shopPromoIds = require("./shopPromoIds.json");
       const scanStart = Date.now();
       console.log("Started scan");
       const products = await parseAllPromos();
