@@ -120,7 +120,7 @@ async function solveCaptcha() {
               }
             result[_offerShowPlace.id] = {
               promos: [],
-              id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[0],
+              id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[1],
             };
             result[_offerShowPlace.id].promos.push(promoId);
           }
