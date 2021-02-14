@@ -18,7 +18,7 @@ var formatter = new Intl.NumberFormat("ru-Ru", {
   maximumFractionDigits: 0, // (causes 2500.99 to be printed as $2,501)
 });
 
-export default function Home({ codes, products, scanEnd }) {
+export default function Home({ codes, products, scanEnd, fastScanEnd }) {
   const router = useRouter();
 
   const [selectedCategory, setSelectedCategry] = useState("Все");
@@ -364,12 +364,19 @@ export default function Home({ codes, products, scanEnd }) {
         </Container>
       </main>
       <footer className="bg-secondary text-white py-0 w-100">
+        <Alert color="secondary" className="mb-0">
+          <p className="mb-0">
+            Последнее обновление списка товаров:{" "}
+            {new Date(fastScanEnd).toLocaleString()}
+          </p>
+          <p className="mb-0">
+            Последнее обновление списка промокодов и реальной выгоды:{" "}
+            {new Date(scanEnd).toLocaleString()}
+          </p>
+        </Alert>
         <Alert color="info" className="mb-0">
-          Выгрзка товаров автомтизированна, теперь мне не надо запускать её
-          вручную и список будет обновляться чаще(Последнее обновление:{" "}
-          {new Date(scanEnd).toLocaleString()}). Кроме этого в таблицу добавлена
-          колонка "Реальная выгода", она показывает разницу с минимальной ценой
-          на товар по маректу в Москве (за идею спасибо{" "}
+          В таблицу добавлена колонка "Реальная выгода", она показывает разницу
+          с минимальной ценой на товар по маректу в Москве (за идею спасибо{" "}
           <a href="https://www.pepper.ru/profile/Rustik_Ufa">Rustik_Ufa</a>),
           пока что в этой колонке возможны ошибки и пропуски. Вопросы, советы и
           замечания по сайту, можете написать мне в{" "}
@@ -405,34 +412,60 @@ export async function getStaticProps(context) {
   const { products, scanEnd } = JSON.parse(
     fs.readFileSync("./products_with_timestamp.json")
   );
-  let uniqueProducts = [];
-  let addedProducts = new Set();
+  const { products: fastProducts, scanEnd: fastScanEnd } = JSON.parse(
+    fs.readFileSync("./products_with_timestamp_from_promos.json")
+  );
+  const unknowHids = new Set(JSON.parse(fs.readFileSync("unknownHids.json")));
+  const hids = require("../hids");
+  const hidToSubCategroyMap = {};
+  for (const hid of hids) {
+    hidToSubCategroyMap[hid.hid] = hid.subCategory;
+  }
+
+  let uniqueProducts = {};
   let bad_prices = [];
   let productsCsv = "Ссылка,Название,Цена со скидкой, Код";
 
+  for (const product of fastProducts) {
+    if (hidToSubCategroyMap[product.hid]) {
+      uniqueProducts[product.id] = {
+        ...product,
+        real_discount: "?",
+        category: hidToSubCategroyMap[product.hid],
+      };
+    } else {
+      unknowHids.add(product.hid);
+    }
+  }
+
   for (const product of products) {
-    if (!addedProducts.has(product.id)) {
-      if (!product.code) {
-        console.log(product);
-      }
-      codes.add(product.code);
-      uniqueProducts.push({
+    if (!product.code) {
+      console.log(product);
+    }
+    codes.add(product.code);
+    if (!uniqueProducts[product.id]) {
+      uniqueProducts[product.id] = {
         ...product,
         real_discount:
           product.min_price < product.old_price
             ? product.min_price - product.price
             : "?",
-      });
-      if (product.min_price > product.old_price) {
-        bad_prices.push(product);
-      }
-      addedProducts.add(product.id);
-      productsCsv += `https://pokupki.market.yandex.ru/product/${product.id},${product.name},${product.price},${product.code}\n`;
+      };
+    } else {
+      uniqueProducts[product.id].real_discount =
+        product.min_price < uniqueProducts[product.id].old_price
+          ? product.min_price - uniqueProducts[product.id].price
+          : "?";
+      uniqueProducts[product.id].img = product.img;
     }
+    if (product.min_price > product.old_price) {
+      bad_prices.push(product);
+    }
+    productsCsv += `https://pokupki.market.yandex.ru/product/${product.id},${product.name},${product.price},${product.code}\n`;
   }
   console.log(`${bad_prices.length} prices are bad`);
   console.log(bad_prices);
-  for (const product of uniqueProducts) {
+  for (const product of Object.values(uniqueProducts)) {
     if (!product.subcategory) {
       product.subcategory = product.category;
       product.category = categoriesHierarhy[product.category];
@@ -441,10 +474,14 @@ export async function getStaticProps(context) {
         console.log(product);
       }
     }
+    if (!product.img) {
+      product.img = "/icons8-inbox-48.png";
+    }
   }
 
   fs.writeFileSync("./products_json.json", JSON.stringify(products), "utf8");
   fs.writeFileSync("./products.csv", productsCsv);
+  fs.writeFileSync("./unknownHids.json", JSON.stringify([...unknowHids]));
 
   return {
     props: {
@@ -453,7 +490,7 @@ export async function getStaticProps(context) {
           (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
           (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
       ),
-      products: uniqueProducts
+      products: Object.values(uniqueProducts)
         .sort(
           (a, b) =>
             (parseInt(b.real_discount) + 0.1 || 0.5) -
@@ -471,6 +508,7 @@ export async function getStaticProps(context) {
           real_discount: product.real_discount,
         })),
       scanEnd,
+      fastScanEnd,
     },
   };
 }
