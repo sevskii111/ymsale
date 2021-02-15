@@ -388,10 +388,10 @@ async function solveCaptcha() {
           let prevProductsAmount = products.size;
           for (const how of [
             "dpop",
-            "aprice",
-            "dprice",
-            "rorp",
-            "discount_p",
+            // "aprice",
+            // "dprice",
+            // "rorp",
+            // "discount_p",
           ]) {
             console.log(how);
             let i = 1;
