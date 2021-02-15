@@ -40,3 +40,5 @@ market_helper*
 products*.json
 tmp
 _*
+
+public/unknownHids.json
