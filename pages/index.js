@@ -285,17 +285,21 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Head>
-        <title>Промокоды для Яндекс.Маркета</title>
+        <title className="mb-0">Промокоды для Яндекс.Маркета</title>
         <link rel="icon" href="/favicon.ico" />
         <meta
           name="description"
-          content="Каталог всех товаров доступных для покупки на Яндекс.Маркете со скидкой по промокодам CUT4-CUT25 и GO3-GO29."
+          content={`Каталог всех товаров доступных для покупки на Яндекс.Маркете со скидкой по промокодам ${codes.join(
+            ", "
+          )}.`}
         />
       </Head>
       <header className="bg-warning mb-3">
         <Container>
           <div className="w-100 py-2">
-            <h1>Промокоды для Яндекс.Маркета</h1>
+            <h1 className="mb-0">
+              <a href="/">Промокоды для Яндекс.Маркета</a>
+            </h1>
           </div>
         </Container>
       </header>
@@ -374,7 +378,8 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
         <Alert color="success" className="mb-0">
           <p className="mb-0">
             Товары по промокоду VSEMPODARKI доступны на{" "}
-            <a href="/vsempodarki">отдельной странице</a>.
+            <a href="/vsempodarki">отдельной странице</a>. Скорее всего список
+            не полный и может быть интересен только реальной выгодой на товары.
           </p>
         </Alert>
         <Alert color="secondary" className="mb-0">

@@ -142,3 +142,9 @@ footer {
 }
 
 /*# sourceMappingURL=react-input-range.css.map*/
+
+h1 a,
+h1 a:hover {
+  color: black;
+  text-decoration: none;
+}
