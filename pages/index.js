@@ -50,12 +50,12 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
             localStorage.getItem("isAdult") === "true"))
     );
     const prices = filtredProducts.map((p) => p.price);
-    let _minProductPrice = prices[0];
+    let _minProductPrice = prices[0] || 0;
     for (const price of prices) {
       _minProductPrice = Math.min(price, _minProductPrice);
     }
     setMinProductPrice(_minProductPrice);
-    let _maxProductPrice = prices[0];
+    let _maxProductPrice = prices[0] || 1;
     for (const price of prices) {
       _maxProductPrice = Math.max(price, _maxProductPrice);
     }
@@ -273,6 +273,7 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
               pill
               onClick={() => setSelectedSubCategory(sub)}
               className="my-1 mr-1"
+              key={sub}
             >
               {sub}
             </Badge>
