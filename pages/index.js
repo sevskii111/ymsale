@@ -433,7 +433,9 @@ export async function getStaticProps(context) {
   const { products: fastProducts, scanEnd: fastScanEnd } = JSON.parse(
     fs.readFileSync("./products_with_timestamp_from_promos.json")
   );
-  const unknowHids = new Set(JSON.parse(fs.readFileSync("unknownHids.json")));
+  const unknowHids = new Set(
+    JSON.parse(fs.readFileSync("./public/unknownHids.json"))
+  );
   const hids = require("../hids");
   const hidToSubCategroyMap = {};
   for (const hid of hids) {
@@ -500,7 +502,10 @@ export async function getStaticProps(context) {
 
   fs.writeFileSync("./products_json.json", JSON.stringify(products), "utf8");
   fs.writeFileSync("./products.csv", productsCsv);
-  fs.writeFileSync("./unknownHids.json", JSON.stringify([...unknowHids]));
+  fs.writeFileSync(
+    "./public/unknownHids.json",
+    JSON.stringify([...unknowHids])
+  );
 
   return {
     props: {
