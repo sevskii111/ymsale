@@ -348,7 +348,18 @@ async function solveCaptcha() {
 
   while (true) {
     try {
-      shopPromoIds = require("./shopPromoIds.json");
+      shopPromoIds = new Set();
+      if (fs.existsSync("./shopPromoIds_fast.json")) {
+        const promoIds = require("./shopPromoIds_fast.json");
+        for (const promoId of promoIds) {
+          shopPromoIds.add(promoId);
+        }
+      }
+      const promoIds = require("./shopPromoIds.json");
+      for (const promoId of promoIds) {
+        shopPromoIds.add(promoId);
+      }
+      shopPromoIds = [...shopPromoIds];
       const scanStart = Date.now();
       console.log("Started scan");
       const products = await parseAllPromos();

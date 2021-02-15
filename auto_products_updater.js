@@ -12,6 +12,8 @@ function sleep(ms) {
 
 const fast = process.argv.indexOf("--fast") !== -1;
 
+const promosOnly = process.argv.indexOf("--promos-only") !== -1;
+
 const logs = process.argv.indexOf("--logs") !== -1;
 
 const gist = process.argv.indexOf("--gist");
@@ -386,12 +388,13 @@ async function solveCaptcha() {
           const products = { filledProducts: {}, unfilledProducts: {} };
           let total = -1;
           let prevProductsAmount = products.size;
+
           for (const how of [
             "dpop",
-            // "aprice",
-            // "dprice",
-            // "rorp",
-            // "discount_p",
+            "aprice",
+            "dprice",
+            "rorp",
+            "discount_p",
           ]) {
             console.log(how);
             let i = 1;
@@ -570,23 +573,35 @@ async function solveCaptcha() {
           },
         });
       }
-      fs.writeFileSync(
-        "./shopPromoIds.json",
-        JSON.stringify([
-          ...products.reduce(
-            (prev, curr) => prev.add(curr.shopPromoId),
-            new Set()
-          ),
-        ])
-      );
-      fs.writeFileSync(
-        "./products_with_timestamp.json",
-        JSON.stringify({
-          scanStart,
-          scanEnd,
-          products: products,
-        })
-      );
+      if (!promosOnly) {
+        fs.writeFileSync(
+          "./shopPromoIds.json",
+          JSON.stringify([
+            ...products.reduce(
+              (prev, curr) => prev.add(curr.shopPromoId),
+              new Set()
+            ),
+          ])
+        );
+        fs.writeFileSync(
+          "./products_with_timestamp.json",
+          JSON.stringify({
+            scanStart,
+            scanEnd,
+            products: products,
+          })
+        );
+      } else {
+        fs.writeFileSync(
+          "./shopPromoIds_fast.json",
+          JSON.stringify([
+            ...products.reduce(
+              (prev, curr) => prev.add(curr.shopPromoId),
+              new Set()
+            ),
+          ])
+        );
+      }
       exec("npm run deploy");
       await sleep(10000);
     } catch (e) {

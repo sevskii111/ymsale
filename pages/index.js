@@ -49,9 +49,16 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
           (selectedCategory === "Товары для взрослых" &&
             localStorage.getItem("isAdult") === "true"))
     );
-    let _minProductPrice = Math.min(...filtredProducts.map((p) => p.price));
+    const prices = filtredProducts.map((p) => p.price);
+    let _minProductPrice = prices[0];
+    for (const price of prices) {
+      _minProductPrice = Math.min(price, _minProductPrice);
+    }
     setMinProductPrice(_minProductPrice);
-    let _maxProductPrice = Math.max(...filtredProducts.map((p) => p.price));
+    let _maxProductPrice = prices[0];
+    for (const price of prices) {
+      _maxProductPrice = Math.max(price, _maxProductPrice);
+    }
     _maxProductPrice = Math.max(_maxProductPrice, _minProductPrice + 1);
     setMaxProductPrice(_maxProductPrice);
     let _priceFilter = {
