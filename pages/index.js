@@ -371,6 +371,12 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
         </Container>
       </main>
       <footer className="bg-secondary text-white py-0 w-100">
+        <Alert color="success" className="mb-0">
+          <p className="mb-0">
+            Товары по промокоду VSEMPODARKI доступны на{" "}
+            <a href="/vsempodarki">отдельной странице</a>.
+          </p>
+        </Alert>
         <Alert color="secondary" className="mb-0">
           <p className="mb-0">
             Последнее обновление списка товаров:{" "}
@@ -493,12 +499,15 @@ export async function getStaticProps(context) {
 
   return {
     props: {
-      codes: [...codes].sort(
-        (a, b) =>
-          (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
-          (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
-      ),
+      codes: [...codes]
+        .filter((code) => code !== "VSEMPODARKI")
+        .sort(
+          (a, b) =>
+            (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
+            (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
+        ),
       products: Object.values(uniqueProducts)
+        .filter((product) => product.code !== "VSEMPODARKI")
         .sort(
           (a, b) =>
             (parseInt(b.real_discount) + 0.1 || 0.5) -
