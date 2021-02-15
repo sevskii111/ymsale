@@ -359,7 +359,9 @@ async function solveCaptcha() {
       for (const promoId of promoIds) {
         shopPromoIds.add(promoId);
       }
+      shopPromoIds.delete("L136930");
       shopPromoIds = [...shopPromoIds];
+
       const scanStart = Date.now();
       console.log("Started scan");
       const products = await parseAllPromos();
