@@ -9,6 +9,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const deploy = process.argv.indexOf("--deploy") !== -1;
 const logs = process.argv.indexOf("--logs") !== -1;
 
 const debug = process.argv.indexOf("--debug") !== -1;
@@ -378,7 +379,9 @@ async function solveCaptcha() {
           products: products,
         })
       );
-      exec("npm run deploy");
+      if (deploy) {
+        exec("npm run deploy");
+      }
       await sleep(10000);
     } catch (e) {
       console.log(e);

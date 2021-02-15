@@ -12,6 +12,8 @@ function sleep(ms) {
 
 const fast = process.argv.indexOf("--fast") !== -1;
 
+const deploy = process.argv.indexOf("--deploy") !== -1;
+
 const promosOnly = process.argv.indexOf("--promos-only") !== -1;
 
 const logs = process.argv.indexOf("--logs") !== -1;
@@ -602,7 +604,9 @@ async function solveCaptcha() {
           ])
         );
       }
-      exec("npm run deploy");
+      if (deploy) {
+        exec("npm run deploy");
+      }
       await sleep(10000);
     } catch (e) {
       console.log(e);
