@@ -19,6 +19,8 @@ var formatter = new Intl.NumberFormat("ru-Ru", {
 });
 
 export default function Home({ codes, products, scanEnd, fastScanEnd }) {
+  let [useRefLinks, setUseRefLinks] = useState("disabled");
+
   const router = useRouter();
 
   const [selectedCategory, setSelectedCategry] = useState("Все");
@@ -34,6 +36,12 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
 
   useEffect(() => {
     addBackToTop({ backgroundColor: "#ffc107" });
+    console.log(localStorage.getItem("useRefLinks"));
+    if (!localStorage.getItem("useRefLinks")) {
+      localStorage.setItem("useRefLinks", "enabled");
+    }
+
+    setUseRefLinks(localStorage.getItem("useRefLinks") === "enabled");
   }, []);
 
   useEffect(() => {
@@ -160,7 +168,9 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
       cell: (row) => (
         <Button
           color="warning"
-          href={`https://pokupki.market.yandex.ru/product/${row.id}`}
+          href={`https://pokupki.market.yandex.ru/product/${row.id}${
+            useRefLinks ? "?pp=1900&clid=2449277&mclid=1002&distr_type=7" : ""
+          }`}
           target="_blank"
           rel="noopener"
         >
@@ -401,8 +411,28 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
           </p>
         </Alert>
         <Alert color="info" className="mb-0">
-          В таблицу добавлена колонка "Реальная выгода", она показывает разницу
-          с минимальной ценой на товар по маректу в Москве (за идею спасибо{" "}
+          Я подключил партнёрскую программу Яндекс.Маркета, ускорения парсинга
+          товаров она не даст, так как новый метод парсинга не обращается к
+          отдельным товарам, если Вам вдруг неприятно кликать по партнёрским
+          ссылкам, вы можете их{" "}
+          <span
+            className="text-primary"
+            role="button"
+            onClick={() => {
+              if (localStorage.getItem("useRefLinks") === "enabled") {
+                localStorage.setItem("useRefLinks", "disabled");
+                setUseRefLinks(false);
+              } else {
+                localStorage.setItem("useRefLinks", "enabled");
+                setUseRefLinks(true);
+              }
+            }}
+          >
+            {useRefLinks ? "отключить" : "включить"}
+          </span>
+          . В таблицу добавлена колонка "Реальная выгода", она показывает
+          разницу с минимальной ценой на товар по маректу в Москве (за идею
+          спасибо{" "}
           <a href="https://www.pepper.ru/profile/Rustik_Ufa">Rustik_Ufa</a>),
           пока что в этой колонке возможны ошибки и пропуски. Вопросы, советы и
           замечания по сайту, можете написать мне в{" "}
