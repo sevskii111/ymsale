@@ -283,6 +283,8 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
     </>
   );
 
+  let dataTableRef;
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Head>
@@ -353,25 +355,30 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
               />
             </Col>
           </Row>
-          <DataTable
-            noHeader={true}
-            columns={columns}
-            data={displayedItems}
-            noDataComponent={
-              itemsLoaded
-                ? "Не найдено товаров соответвущий критериям"
-                : "Идёт загрузка товаров..."
-            }
-            pagination={true}
-            paginationRowsPerPageOptions={[10, 50, 100, 500, 1000]}
-            paginationComponentOptions={{
-              rowsPerPageText: "Товаров на странице:",
-              rangeSeparatorText: "из",
-              noRowsPerPage: false,
-              selectAllRowsItem: false,
-              selectAllRowsItemText: "Все",
-            }}
-          />
+          <div ref={(ref) => (dataTableRef = ref)}>
+            <DataTable
+              noHeader={true}
+              columns={columns}
+              data={displayedItems}
+              noDataComponent={
+                itemsLoaded
+                  ? "Не найдено товаров соответвущий критериям"
+                  : "Идёт загрузка товаров..."
+              }
+              pagination={true}
+              paginationRowsPerPageOptions={[10, 50, 100, 500, 1000]}
+              paginationComponentOptions={{
+                rowsPerPageText: "Товаров на странице:",
+                rangeSeparatorText: "из",
+                noRowsPerPage: false,
+                selectAllRowsItem: false,
+                selectAllRowsItemText: "Все",
+              }}
+              onChangePage={() => {
+                dataTableRef.scrollIntoView();
+              }}
+            />
+          </div>
           {router.query["bb"] ? selectors : null}
         </Container>
       </main>
