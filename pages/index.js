@@ -486,6 +486,7 @@ export async function getStaticProps(context) {
   let productsCsv = "Ссылка,Название,Цена со скидкой, Код";
 
   for (const product of fastProducts) {
+    codes.add(product.code);
     if (hidToSubCategroyMap[product.hid]) {
       uniqueProducts[product.id] = {
         ...product,
@@ -497,12 +498,14 @@ export async function getStaticProps(context) {
     }
   }
 
+  codes.add("VSEMPODARKI");
   for (const product of products) {
     if (!product.code) {
       console.log(product);
     }
-    codes.add(product.code);
+    //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
+      if (product.code !== "L136930") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:

@@ -42,3 +42,5 @@ tmp
 _*
 
 public/unknownHids.json
+shopPromoIds.json
+shopPromoIds_fast.json

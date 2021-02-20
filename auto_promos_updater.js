@@ -152,18 +152,22 @@ async function solveCaptcha() {
         for (const _product of Object.values(product)) {
           let showPlaceIds = _product.showPlaceIds;
           if (showPlaceIds) {
+            const img = _product.pictures
+              ? _product.pictures[0].original
+              : null;
+
             for (const showPlaceId of showPlaceIds) {
               result.filledProducts[showPlaceId] = {
                 uid: showPlaceId,
                 name: _product.titles.raw,
-                img:
-                  _product.pictures && _product.pictures[0].original
-                    ? `https://avatars.mds.yandex.net/get-mpic/${_product.pictures[0].original.groupId}/${_product.pictures[0].original.key}/50x50`
-                    : null,
+                img: img
+                  ? `https://avatars.mds.yandex.net/get-mpic/${img.groupId}/${img.key}/50x50`
+                  : null,
                 hid: _product.categoryIds[0],
               };
             }
           } else {
+            console.log(`No showplaceid for ${JSON.stringify(_product)}`);
           }
         }
         return result;
@@ -296,6 +300,14 @@ async function solveCaptcha() {
                     },
                     resources: {
                       garsons: [
+                        {
+                          id: "PrimeSearchNormalized",
+                          count: 15,
+                          params: {
+                            onstock: "1",
+                            hid: "6427100",
+                          },
+                        },
                         ...shopPromoIds.map((shopPromoId) => ({
                           id: "PrimeSearchNormalized",
                           count: 99999,
