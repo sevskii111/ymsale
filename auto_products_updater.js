@@ -171,21 +171,25 @@ async function solveCaptcha() {
           return result;
         }
 
+        function findBestPromo(promos) {
+          return promos
+            .filter(
+              (promo) =>
+                promo.type === "promo-code" &&
+                promo.mechanicsPaymentType === "CPA"
+            )
+            .sort(
+              (a, b) =>
+                a.itemsInfo.promoPrice.value - b.itemsInfo.promoPrice.value
+            )[0];
+        }
+
         function parseOffer(offer) {
           let result = {};
 
           for (const _offer of Object.values(offer)) {
             const promos = _offer.promos;
-            const bestPromo = promos
-              .filter(
-                (promo) =>
-                  promo.type === "promo-code" &&
-                  promo.mechanicsPaymentType === "CPA"
-              )
-              .sort(
-                (a, b) =>
-                  a.itemsInfo.promoPrice.value - b.itemsInfo.promoPrice.value
-              )[0];
+            const bestPromo = findBestPromo(promos);
             if (!bestPromo) {
               continue;
             }
@@ -219,6 +223,23 @@ async function solveCaptcha() {
                 //   console.log(showPlaceId);
                 //   console.log(_product);
                 // }
+                let offer = {};
+                if ((offer.id = showPlaceId.marketSku)) {
+                  offer.id = showPlaceId.marketSku;
+                }
+                if (showPlaceId.promos) {
+                  const bestPromo = findBestPromo(showPlaceId.promos);
+                  if (bestPromo) {
+                    const itemsInfo = bestPromo.itemsInfo;
+                    offer.code = itemsInfo.promoCode;
+                    offer.shopPromoId = bestPromo.shopPromoId;
+                    offer.old_price = itemsInfo.promoPrice.discount.oldMin;
+                    offer.price = itemsInfo.promoPrice.value;
+                  } else {
+                    //console.log("NO BEST PROMO FOUND");
+                  }
+                }
+
                 result.filledProducts[showPlaceId.showUid] = {
                   product_id: _product.id,
                   uid: showPlaceId.showUid,
@@ -230,6 +251,7 @@ async function solveCaptcha() {
                         "50x50"
                       )
                     : null,
+                  ...offer,
                 };
               }
             } else {
@@ -256,6 +278,11 @@ async function solveCaptcha() {
 
           for (const productId in products.filledProducts) {
             const product = products.filledProducts[productId];
+            if (product.shopPromoId) {
+              filledResult.push({
+                ...product,
+              });
+            }
             const offerShowPlace = offerShowPlaces[productId];
             const offer = offers[offerShowPlace];
 
@@ -372,15 +399,15 @@ async function solveCaptcha() {
         }
 
         function calcLen(products) {
-          let i = Object.keys(products).length * 100000;
-          if (superFastMode) i = 0;
-          for (const product_id in products) {
-            if (products[product_id].offer) {
-              i++;
-            }
-          }
-          return (
+          let i =
             Object.keys(products.filledProducts).length * 100000 +
+            Object.values(products.filledProducts).filter(
+              (p) => !!p.shopPromoId
+            ).length;
+          if (superFastMode) i %= 100000;
+
+          return (
+            i * 100000 +
             Object.keys(products.unfilledProducts).length *
               (superFastMode ? 0 : 1)
           );
@@ -405,7 +432,7 @@ async function solveCaptcha() {
               const page = await parseSearchPage(hid, i++, how);
               total = page.total;
               page.filledProducts.forEach((product) => {
-                products.filledProducts[product.name] = product;
+                products.filledProducts[product.id] = product;
               });
               page.unfilledProducts.forEach((product) => {
                 products.unfilledProducts[product.product_id] = product;
@@ -415,7 +442,7 @@ async function solveCaptcha() {
               prevProductsAmount < calcLen(products) &&
               Object.keys(products.filledProducts).length < total
             );
-            if (Object.keys(products).length >= total) {
+            if (Object.keys(products.filledProducts).length >= total) {
               break;
             }
           }
@@ -446,7 +473,7 @@ async function solveCaptcha() {
           let globalUnfilled = [];
 
           let i = 0;
-          for ({ hid, subCategory } of hids) {
+          for (const { hid, subCategory } of hids) {
             i++;
             console.log(`${i}/${hids.length}`);
             const { filledProducts, unfilledProducts } = await parseHid(hid);
@@ -491,14 +518,14 @@ async function solveCaptcha() {
                     break;
                 }
                 page.filledProducts.forEach((product) => {
-                  if (filledProducts[product.name]) {
-                    filledProducts[product.name].min_price = Math.min(
+                  if (filledProducts[product.id]) {
+                    filledProducts[product.id].min_price = Math.min(
                       product.min_price,
-                      filledProducts[product.name].min_price
+                      filledProducts[product.id].min_price
                     );
-                    filledProducts[product.name].reload = false;
+                    filledProducts[product.id].reload = false;
                   } else {
-                    filledProducts[product.name] = product;
+                    filledProducts[product.id] = product;
                   }
                 });
                 page.unfilledProducts.forEach((product) => {
