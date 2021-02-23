@@ -1,8 +1,8 @@
 import Head from "next/head";
 import { Alert, Badge, Button, Col, Container, Input, Row } from "reactstrap";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DataTable from "react-data-table-component";
-import categoriesHierarhy from "../categories_hierarchy.json";
+import categoriesHierarhyNew from "../categories_hierarchy_new.json";
 import { YMInitializer } from "react-yandex-metrika";
 import fs from "fs";
 import InputRange from "react-input-range";
@@ -18,25 +18,45 @@ var formatter = new Intl.NumberFormat("ru-Ru", {
   maximumFractionDigits: 0, // (causes 2500.99 to be printed as $2,501)
 });
 
-export default function Home({ codes, products, scanEnd, fastScanEnd }) {
+export default function Home({
+  codes,
+  products: _products,
+  scanEnd,
+  fastScanEnd,
+  hierarchy,
+  parentCategories,
+  categoriesIds,
+  categories,
+}) {
+  const products = useMemo(
+    () =>
+      _products.map((p, i) => ({
+        ...p,
+        code: codes[p.code],
+        categories: new Set(categories[p.category]),
+      })),
+    [_products]
+  );
+
   let [useRefLinks, setUseRefLinks] = useState("disabled");
 
   const router = useRouter();
 
-  const [selectedCategory, setSelectedCategry] = useState("Все");
-  const [selectedSubCategory, setSelectedSubCategory] = useState("Все");
+  const [showAllCodes, setShowAllCodes] = useState(false);
+  const [selectedCategory, setSelectedCategry] = useState(["Все"]);
   const [selectedCode, setSelectedCode] = useState("Все");
-  const [displayedItems, setDisplayedItems] = useState();
-  const [showSubcategoriesFor, setShowSubcategoriesFor] = useState(null);
+  const [displayedItems, setDisplayedItems] = useState([]);
   const [search, setSearch] = useState("");
   const [minProductPrice, setMinProductPrice] = useState(0);
   const [maxProductPrice, setMaxProductPrice] = useState(1);
   const [priceFilter, setPriceFilter] = useState({ min: 0, max: 1 });
   const [itemsLoaded, setItemsLoaded] = useState(false);
 
+  const [subCategories, setSubCategories] = useState(parentCategories);
+
   useEffect(() => {
     addBackToTop({ backgroundColor: "#ffc107" });
-    console.log(localStorage.getItem("useRefLinks"));
+    //console.log(localStorage.getItem("useRefLinks"));
     if (!localStorage.getItem("useRefLinks")) {
       localStorage.setItem("useRefLinks", "enabled");
     }
@@ -49,13 +69,11 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
       (item) =>
         (selectedCode === "Все" ||
           item.code.toUpperCase() === selectedCode.toUpperCase()) &&
-        (selectedCategory === "Все" || item.category === selectedCategory) &&
-        (selectedSubCategory === "Все" ||
-          item.subcategory === selectedSubCategory) &&
-        item.name.toLowerCase().indexOf(search.toLowerCase()) !== -1 &&
-        (!item.isAdult ||
-          (selectedCategory === "Товары для взрослых" &&
-            localStorage.getItem("isAdult") === "true"))
+        (selectedCategory.length === 1 ||
+          item.categories.has(
+            categoriesIds[selectedCategory[selectedCategory.length - 1]]
+          )) &&
+        item.name.toLowerCase().indexOf(search.toLowerCase()) !== -1
     );
     const prices = filtredProducts.map((p) => p.price);
     let _minProductPrice = prices[0] || 0;
@@ -73,11 +91,17 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
       min:
         minProductPrice === priceFilter.min
           ? _minProductPrice
-          : Math.max(priceFilter.min, _minProductPrice),
+          : Math.min(
+              Math.max(priceFilter.min, _minProductPrice),
+              _maxProductPrice - 0.01
+            ),
       max:
         maxProductPrice === priceFilter.max
           ? _maxProductPrice
-          : Math.min(priceFilter.max, _maxProductPrice),
+          : Math.max(
+              Math.min(priceFilter.max, _maxProductPrice),
+              _minProductPrice + 0.01
+            ),
     };
     if (
       _priceFilter.min !== priceFilter.min ||
@@ -85,26 +109,41 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
     ) {
       setPriceFilter(_priceFilter);
     }
+
     setDisplayedItems(
       filtredProducts.filter(
         (p) => p.price >= _priceFilter.min && p.price <= _priceFilter.max
       )
     );
     setItemsLoaded(true);
-  }, [
-    selectedCode,
-    selectedCategory,
-    selectedSubCategory,
-    search,
-    priceFilter,
-  ]);
+
+    setSubCategories(
+      (selectedCategory.length === 1
+        ? [...parentCategories]
+        : Object.keys(getByPath(hierarchy, selectedCategory.slice(1)))
+      )
+        .sort()
+        .filter((c) =>
+          filtredProducts.find((p) => p.categories.has(categoriesIds[c]))
+        )
+    );
+  }, [selectedCode, selectedCategory, search, priceFilter]);
 
   const columns = [
     {
       name: "Изображение",
       selector: "image",
       cell: (row) => (
-        <img src={row.img} width="50" height="50" alt={row.name} />
+        <img
+          src={
+            row.img
+              ? `//avatars.mds.yandex.net/get-mpic/${row.img}/50x50`
+              : "/not_found_svg.svg"
+          }
+          width="50"
+          height="50"
+          alt={row.name}
+        />
       ),
       center: true,
       grow: "0",
@@ -183,42 +222,17 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
     },
   ];
 
-  const categories = [
-    "Все",
-    ...[
-      ...products
-        .filter(
-          (item) =>
-            selectedCode === "Все" ||
-            item.code.toUpperCase() === selectedCode.toUpperCase()
-        )
-        .reduce((prev, curr) => {
-          return prev.add(curr.category);
-        }, new Set()),
-    ].sort((a, b) =>
-      a === "Товары для взрослых"
-        ? 1
-        : b === "Товары для взрослых"
-        ? -1
-        : a.localeCompare(b)
-    ),
-  ];
+  function getByPath(obj, parts) {
+    var o = obj;
+    if (parts.length > 1) {
+      for (var i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]]) o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+    }
 
-  const subCategories = [
-    "Все",
-    ...[
-      ...products
-        .filter(
-          (item) =>
-            (selectedCode === "Все" ||
-              item.code.toUpperCase() === selectedCode.toUpperCase()) &&
-            showSubcategoriesFor === item.category
-        )
-        .reduce((prev, curr) => {
-          return prev.add(curr.subcategory);
-        }, new Set()),
-    ].sort(),
-  ];
+    return o[parts[parts.length - 1]];
+  }
 
   const selectors = (
     <>
@@ -226,7 +240,7 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
       <div className="d-flex flex-wrap">
         <h3 className="mr-2">Промокоды:</h3>
         {[
-          ["Все", ...codes].map((code) => (
+          ...(showAllCodes ? ["Все", ...codes] : ["Все"]).map((code) => (
             <div className="h3 mr-1" key={code}>
               <Badge
                 color={code === selectedCode ? "warning" : "secondary"}
@@ -237,56 +251,50 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
               </Badge>
             </div>
           )),
+          <div className="h3 mr-1" key="toggle">
+            <Badge
+              color="light"
+              className="border border-warning"
+              pill
+              onClick={() => setShowAllCodes(!showAllCodes)}
+            >
+              {showAllCodes ? "< Скрыть список" : "Показать список >"}
+            </Badge>
+          </div>,
         ]}
       </div>
-      <div className="d-flex flex-wrap overflow-auto">
-        <h5 className="mr-2">Категории:</h5>
-        {categories.map((category) => (
-          <div className="h5 mr-1" key={category}>
-            <Badge
-              color={
-                category === selectedCategory
-                  ? "warning"
-                  : category === "Товары для взрослых"
-                  ? "danger"
-                  : "secondary"
-              }
-              pill
-              onClick={() => {
-                if (
-                  category === "Товары для взрослых" &&
-                  (!localStorage.getItem("isAdult") ||
-                    localStorage.getItem("isAdult") !== "true")
-                ) {
-                  const isAdult = confirm("Вам есть 18 лет?");
-                  localStorage.setItem("isAdult", isAdult);
-                  if (!isAdult) {
-                    return;
-                  }
+      <div className="d-flex flex-wrap overflow-auto mt-2">
+        <h5 className="mr-2">Категория:</h5>
+        <ol className="breadcrumb-arrow">
+          {selectedCategory.map((sc, i) => (
+            <li key={sc}>
+              <span
+                role="button"
+                onClick={() =>
+                  setSelectedCategry(selectedCategory.slice(0, i + 1))
                 }
-                setSelectedCategry(category);
-                setShowSubcategoriesFor(category === "Все" ? null : category);
-                setSelectedSubCategory("Все");
-              }}
-            >
-              {category}
-            </Badge>
-          </div>
-        ))}
+              >
+                {sc}
+              </span>
+            </li>
+          ))}
+        </ol>
       </div>
-      {showSubcategoriesFor !== null ? (
-        <div className="d-flex flex-wrap">
-          <p className="mr-2 mb-0">Подкатегории:</p>
-          {subCategories.map((sub) => (
-            <Badge
-              color={sub === selectedSubCategory ? "warning" : "secondary"}
-              pill
-              onClick={() => setSelectedSubCategory(sub)}
-              className="my-1 mr-1"
-              key={sub}
-            >
-              {sub}
-            </Badge>
+      {subCategories.length > 0 ? (
+        <div className="d-flex flex-wrap overflow-auto">
+          <h5 className="mr-2 mb-0">Подкатегории:</h5>
+          {subCategories.map((category) => (
+            <div className="h4 mr-1 mb-1" key={category}>
+              <Badge
+                color={category === selectedCategory ? "warning" : "secondary"}
+                pill
+                onClick={() => {
+                  setSelectedCategry([...selectedCategory, category]);
+                }}
+              >
+                {category}
+              </Badge>
+            </div>
           ))}
         </div>
       ) : null}
@@ -371,9 +379,11 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
               columns={columns}
               data={displayedItems}
               noDataComponent={
-                itemsLoaded
-                  ? "Не найдено товаров соответвущий критериям"
-                  : "Идёт загрузка товаров..."
+                itemsLoaded ? (
+                  "Не найдено товаров соответвущий критериям"
+                ) : (
+                  <h2 className="text-center">"Идёт загрузка товаров..."</h2>
+                )
               }
               pagination={true}
               paginationRowsPerPageOptions={[10, 50, 100, 500, 1000]}
@@ -393,14 +403,14 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
         </Container>
       </main>
       <footer className="bg-secondary text-white py-0 w-100">
-        <Alert color="success" className="mb-0">
+        <Alert color="success" className="mb-0" fade={false}>
           <p className="mb-0">
             Товары по промокоду VSEMPODARKI доступны на{" "}
-            <a href="/vsempodarki">отдельной странице</a>. Скорее всего список
-            не полный и может быть интересен только реальной выгодой на товары.
+            <a href="/vsempodarki">отдельной странице</a>. Cписок не полный и
+            может быть интересен только реальной выгодой на товары.
           </p>
         </Alert>
-        <Alert color="secondary" className="mb-0">
+        <Alert color="secondary" className="mb-0" fade={false}>
           <p className="mb-0">
             Последнее обновление списка товаров:{" "}
             {new Date(fastScanEnd).toLocaleString()}
@@ -410,11 +420,8 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
             {new Date(scanEnd).toLocaleString()}
           </p>
         </Alert>
-        <Alert color="info" className="mb-0">
-          Я подключил партнёрскую программу Яндекс.Маркета, ускорения парсинга
-          товаров она не даст, так как новый метод парсинга не обращается к
-          отдельным товарам, если Вам вдруг неприятно кликать по партнёрским
-          ссылкам, вы можете их{" "}
+        <Alert color="info" className="mb-0" fade={false}>
+          Ссылки на Маркет являются партнёрскими(
           <span
             className="text-primary"
             role="button"
@@ -430,12 +437,11 @@ export default function Home({ codes, products, scanEnd, fastScanEnd }) {
           >
             {useRefLinks ? "отключить" : "включить"}
           </span>
-          . В таблицу добавлена колонка "Реальная выгода", она показывает
-          разницу с минимальной ценой на товар по маректу в Москве (за идею
-          спасибо{" "}
-          <a href="https://www.pepper.ru/profile/Rustik_Ufa">Rustik_Ufa</a>),
-          пока что в этой колонке возможны ошибки и пропуски. Вопросы, советы и
-          замечания по сайту, можете написать мне в{" "}
+          ) . Для некоторых товаров имеется колонка "Реальная выгода", она
+          показывает разницу с минимальной ценой на товар по маректу в Москве
+          (за идею спасибо{" "}
+          <a href="https://www.pepper.ru/profile/Rustik_Ufa">Rustik_Ufa</a>).
+          Обратную связь по сайту, можете написать мне в{" "}
           <a
             href="https://www.pepper.ru/profile/sevskii"
             target="_blank"
@@ -527,19 +533,13 @@ export async function getStaticProps(context) {
   }
   console.log(`${bad_prices.length} prices are bad`);
   console.log(bad_prices);
-  for (const product of Object.values(uniqueProducts)) {
-    if (!product.subcategory) {
-      product.subcategory = product.category;
-      product.category = categoriesHierarhy[product.category];
-      product.isAdult = product.category === "Товары для взрослых";
-      if (!product.category) {
-        console.log(product);
-      }
-    }
-    if (!product.img) {
-      product.img = "/icons8-inbox-48.png";
-    }
-  }
+  // for (const product of Object.values(uniqueProducts)) {
+  //   product.category = categoriesHierarhy[product.category];
+
+  //   if (!product.img) {
+  //     product.img = "/icons8-inbox-48.png";
+  //   }
+  // }
 
   fs.writeFileSync("./products_json.json", JSON.stringify(products), "utf8");
   fs.writeFileSync("./products.csv", productsCsv);
@@ -548,33 +548,69 @@ export async function getStaticProps(context) {
     JSON.stringify([...unknowHids])
   );
 
+  codes = [...codes]
+    .filter((code) => code !== "VSEMPODARKI")
+    .sort(
+      (a, b) =>
+        (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
+        (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
+    );
+  let codesMap = {};
+  codes.forEach((code, i) => (codesMap[code] = i));
+
+  const categoriesIds = {};
+  const categories = {};
+  for (const category in categoriesHierarhyNew.hierarchy_inversed) {
+    if (!categoriesIds[category]) {
+      categoriesIds[category] = Object.keys(categoriesIds).length;
+    }
+    const categoryTree = categoriesHierarhyNew.hierarchy_inversed[category];
+    for (const parentCategory of categoryTree) {
+      if (!categoriesIds[parentCategory]) {
+        categoriesIds[parentCategory] = Object.keys(categoriesIds).length;
+      }
+    }
+
+    categories[categoriesIds[category]] = categoryTree.map(
+      (c) => categoriesIds[c]
+    );
+  }
+
+  // console.log(categories);
+
+  console.log(Object.values(uniqueProducts)[0]);
+
+  const products_sorted = Object.values(uniqueProducts)
+    .filter((product) => product.code !== "VSEMPODARKI")
+    .sort(
+      (a, b) =>
+        (parseInt(b.real_discount) + 0.1 || 0.5) -
+        (parseInt(a.real_discount) + 0.1 || 0.5)
+    );
+
   return {
     props: {
-      codes: [...codes]
-        .filter((code) => code !== "VSEMPODARKI")
-        .sort(
-          (a, b) =>
-            (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
-            (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
-        ),
-      products: Object.values(uniqueProducts)
-        .filter((product) => product.code !== "VSEMPODARKI")
-        .sort(
-          (a, b) =>
-            (parseInt(b.real_discount) + 0.1 || 0.5) -
-            (parseInt(a.real_discount) + 0.1 || 0.5)
-        )
-        .map((product) => ({
-          name: product.name,
-          img: product.img,
-          id: product.id,
-          code: product.code,
-          old_price: product.old_price,
-          price: product.price,
-          category: product.category,
-          subcategory: product.subcategory,
-          real_discount: product.real_discount,
-        })),
+      codes: codes,
+      hierarchy: categoriesHierarhyNew.hierarchy,
+      parentCategories: categoriesHierarhyNew.parentCategories,
+      products: products_sorted.map((product) => ({
+        name: product.name,
+        img: product.img
+          ? product.img
+              .replace("https://avatars.mds.yandex.net/get-mpic/", "")
+              .replace("//avatars.mds.yandex.net/get-mpic/", "")
+              .replace("/50x50", "")
+          : null,
+        id: product.id,
+        code: codesMap[product.code],
+        old_price: product.old_price,
+        price: product.price,
+        category: categoriesIds[product.category],
+        real_discount: product.real_discount,
+      })),
+
+      categoriesIds,
+      categories,
       scanEnd,
       fastScanEnd,
     },

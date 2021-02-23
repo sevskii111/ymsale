@@ -1,8 +1,8 @@
 import Head from "next/head";
 import { Alert, Badge, Button, Col, Container, Input, Row } from "reactstrap";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DataTable from "react-data-table-component";
-import categoriesHierarhy from "../categories_hierarchy.json";
+import categoriesHierarhyNew from "../categories_hierarchy_new.json";
 import { YMInitializer } from "react-yandex-metrika";
 import fs from "fs";
 import InputRange from "react-input-range";
@@ -20,7 +20,9 @@ export async function getStaticProps(context) {
   const { products: fastProducts, scanEnd: fastScanEnd } = JSON.parse(
     fs.readFileSync("./products_with_timestamp_from_promos.json")
   );
-  const unknowHids = new Set(JSON.parse(fs.readFileSync("unknownHids.json")));
+  const unknowHids = new Set(
+    JSON.parse(fs.readFileSync("./public/unknownHids.json"))
+  );
   const hids = require("../hids");
   const hidToSubCategroyMap = {};
   for (const hid of hids) {
@@ -33,6 +35,7 @@ export async function getStaticProps(context) {
   let productsCsv = "Ссылка,Название,Цена со скидкой, Код";
 
   for (const product of fastProducts) {
+    codes.add(product.code);
     if (hidToSubCategroyMap[product.hid]) {
       uniqueProducts[product.id] = {
         ...product,
@@ -44,12 +47,14 @@ export async function getStaticProps(context) {
     }
   }
 
+  codes.add("VSEMPODARKI");
   for (const product of products) {
     if (!product.code) {
       console.log(product);
     }
-    codes.add(product.code);
+    //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
+      if (product.code !== "L136930") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
@@ -71,45 +76,91 @@ export async function getStaticProps(context) {
   }
   console.log(`${bad_prices.length} prices are bad`);
   console.log(bad_prices);
-  for (const product of Object.values(uniqueProducts)) {
-    if (!product.subcategory) {
-      product.subcategory = product.category;
-      product.category = categoriesHierarhy[product.category];
-      product.isAdult = product.category === "Товары для взрослых";
-      if (!product.category) {
-        console.log(product);
+  // for (const product of Object.values(uniqueProducts)) {
+  //   product.category = categoriesHierarhy[product.category];
+
+  //   if (!product.img) {
+  //     product.img = "/icons8-inbox-48.png";
+  //   }
+  // }
+
+  fs.writeFileSync("./products_json.json", JSON.stringify(products), "utf8");
+  fs.writeFileSync("./products.csv", productsCsv);
+  fs.writeFileSync(
+    "./public/unknownHids.json",
+    JSON.stringify([...unknowHids])
+  );
+
+  codes = [...codes]
+    .filter((code) => code === "VSEMPODARKI")
+    .sort(
+      (a, b) =>
+        (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
+        (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
+    );
+  let codesMap = {};
+  codes.forEach((code, i) => (codesMap[code] = i));
+
+  const categoriesIds = {};
+  const categories = {};
+  for (const category in categoriesHierarhyNew.hierarchy_inversed) {
+    if (!categoriesIds[category]) {
+      categoriesIds[category] = Object.keys(categoriesIds).length;
+    }
+    const categoryTree = categoriesHierarhyNew.hierarchy_inversed[category];
+    for (const parentCategory of categoryTree) {
+      if (!categoriesIds[parentCategory]) {
+        categoriesIds[parentCategory] = Object.keys(categoriesIds).length;
       }
     }
-    if (!product.img) {
-      product.img = "/icons8-inbox-48.png";
-    }
+
+    categories[categoriesIds[category]] = categoryTree.map(
+      (c) => categoriesIds[c]
+    );
   }
 
-  // fs.writeFileSync("./products_json.json", JSON.stringify(products), "utf8");
-  // fs.writeFileSync("./products.csv", productsCsv);
-  // fs.writeFileSync("./unknownHids.json", JSON.stringify([...unknowHids]));
+  // console.log(categories);
+
+  console.log(Object.values(uniqueProducts)[0]);
+
+  const products_sorted = Object.values(uniqueProducts)
+    .filter((product) => product.code === "VSEMPODARKI")
+    .sort(
+      (a, b) =>
+        (parseInt(b.real_discount) + 0.1 || 0.5) -
+        (parseInt(a.real_discount) + 0.1 || 0.5)
+    );
 
   return {
     props: {
-      codes: ["VSEMPODARKI"],
-      products: Object.values(uniqueProducts)
-        .filter((p) => p.code === "VSEMPODARKI")
-        .sort(
-          (a, b) =>
-            (parseInt(b.real_discount) + 0.1 || 0.5) -
-            (parseInt(a.real_discount) + 0.1 || 0.5)
-        )
-        .map((product) => ({
-          name: product.name,
-          img: product.img,
-          id: product.id,
-          code: product.code,
-          old_price: product.old_price,
-          price: product.price,
-          category: product.category,
-          subcategory: product.subcategory,
-          real_discount: product.real_discount,
-        })),
+      codes: codes,
+      hierarchy: categoriesHierarhyNew.hierarchy,
+      parentCategories: categoriesHierarhyNew.parentCategories,
+      products: products_sorted.map((product) => ({
+        name: product.name,
+        // img: product.img
+        //   ? product.img
+        //       .replace("https://avatars.mds.yandex.net/get-mpic/", "")
+        //       .replace("//avatars.mds.yandex.net/get-mpic/", "")
+        //       .replace("/50x50", "")
+        //   : null,
+        id: product.id,
+        code: codesMap[product.code],
+        old_price: product.old_price,
+        price: product.price,
+        category: categoriesIds[product.category],
+        real_discount: product.real_discount,
+      })),
+      images: products_sorted.map((product) =>
+        product.img
+          ? product.img
+              .replace("https://avatars.mds.yandex.net/get-mpic/", "")
+              .replace("//avatars.mds.yandex.net/get-mpic/", "")
+              .replace("/50x50", "")
+          : null
+      ),
+      categoriesIds,
+      categories,
       scanEnd,
       fastScanEnd,
     },
