@@ -511,7 +511,7 @@ export async function getStaticProps(context) {
     }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      if (product.code !== "L136930") continue;
+      if (product.code !== "VSEMPODARKI") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:

@@ -54,7 +54,7 @@ export async function getStaticProps(context) {
     }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      if (product.code !== "L136930") continue;
+      if (product.code !== "VSEMPODARKI") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
@@ -138,12 +138,12 @@ export async function getStaticProps(context) {
       parentCategories: categoriesHierarhyNew.parentCategories,
       products: products_sorted.map((product) => ({
         name: product.name,
-        // img: product.img
-        //   ? product.img
-        //       .replace("https://avatars.mds.yandex.net/get-mpic/", "")
-        //       .replace("//avatars.mds.yandex.net/get-mpic/", "")
-        //       .replace("/50x50", "")
-        //   : null,
+        img: product.img
+          ? product.img
+              .replace("https://avatars.mds.yandex.net/get-mpic/", "")
+              .replace("//avatars.mds.yandex.net/get-mpic/", "")
+              .replace("/50x50", "")
+          : null,
         id: product.id,
         code: codesMap[product.code],
         old_price: product.old_price,
@@ -151,14 +151,7 @@ export async function getStaticProps(context) {
         category: categoriesIds[product.category],
         real_discount: product.real_discount,
       })),
-      images: products_sorted.map((product) =>
-        product.img
-          ? product.img
-              .replace("https://avatars.mds.yandex.net/get-mpic/", "")
-              .replace("//avatars.mds.yandex.net/get-mpic/", "")
-              .replace("/50x50", "")
-          : null
-      ),
+
       categoriesIds,
       categories,
       scanEnd,
