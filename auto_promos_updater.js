@@ -372,7 +372,7 @@ async function solveCaptcha() {
       for (const promoId of promoIds) {
         shopPromoIds.add(promoId);
       }
-      shopPromoIds.delete("L136930");
+      shopPromoIds.delete("L137199");
       shopPromoIds = [...shopPromoIds];
 
       const scanStart = Date.now();

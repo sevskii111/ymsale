@@ -382,7 +382,7 @@ export default function Home({
                 itemsLoaded ? (
                   "Не найдено товаров соответвущий критериям"
                 ) : (
-                  <h2 className="text-center">"Идёт загрузка товаров..."</h2>
+                  <h2 className="text-center">Идёт загрузка товаров...</h2>
                 )
               }
               pagination={true}
@@ -405,7 +405,7 @@ export default function Home({
       <footer className="bg-secondary text-white py-0 w-100">
         <Alert color="success" className="mb-0" fade={false}>
           <p className="mb-0">
-            Товары по промокоду VSEMPODARKI доступны на{" "}
+            Товары по промокоду VSEMPODARKI8 доступны на{" "}
             <a href="/vsempodarki">отдельной странице</a>. Cписок не полный и
             может быть интересен только реальной выгодой на товары.
           </p>
@@ -504,14 +504,14 @@ export async function getStaticProps(context) {
     }
   }
 
-  codes.add("VSEMPODARKI");
+  codes.add("VSEMPODARKI8");
   for (const product of products) {
     if (!product.code) {
       console.log(product);
     }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      if (product.code !== "VSEMPODARKI") continue;
+      if (product.code !== "VSEMPODARKI8") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
@@ -549,7 +549,7 @@ export async function getStaticProps(context) {
   );
 
   codes = [...codes]
-    .filter((code) => code !== "VSEMPODARKI")
+    .filter((code) => code !== "VSEMPODARKI8")
     .sort(
       (a, b) =>
         (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
@@ -581,7 +581,7 @@ export async function getStaticProps(context) {
   console.log(Object.values(uniqueProducts)[0]);
 
   const products_sorted = Object.values(uniqueProducts)
-    .filter((product) => product.code !== "VSEMPODARKI")
+    .filter((product) => product.code !== "VSEMPODARKI8")
     .sort(
       (a, b) =>
         (parseInt(b.real_discount) + 0.1 || 0.5) -
