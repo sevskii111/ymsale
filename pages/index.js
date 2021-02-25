@@ -323,6 +323,13 @@ export default function Home({
             </h1>
           </div>
         </Container>
+        <Alert color="success" className="mb-0 text-center" fade={false}>
+          <Container>
+            <p className="mb-0">
+              Огромное спасибо всем, кто распространяет ссылку на этот сайт!
+            </p>
+          </Container>
+        </Alert>
       </header>
       <main className="overflow-auto mb-3">
         <Container fluid="md">
@@ -461,7 +468,7 @@ export default function Home({
           её как можно скорее исправить.
         </Alert> */}
         <Container className="py-2">
-          Создатель сайта не имеет отношения к компаниям Яндекс и Яндекс.Марект
+          Создатель сайта не имеет отношения к компаниям Яндекс и Яндекс.Маркет
         </Container>
       </footer>
       <YMInitializer accounts={[71256484]} />
