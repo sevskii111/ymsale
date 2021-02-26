@@ -358,10 +358,13 @@ async function solveCaptcha() {
     return products;
   }
 
-  const mongoClient = new MongoClient("mongodb://localhost:27017/ymsale", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  const mongoClient = new MongoClient(
+    "mongodb+srv://admin:X3LWT3h2E83frAPp@cluster0.zqbcv.mongodb.net/ymsales?retryWrites=true&w=majority",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }
+  );
 
   const client = await mongoClient.connect();
 
@@ -386,12 +389,9 @@ async function solveCaptcha() {
       throw "WTF";
     }
 
-    const bulk = products_from_promos_collection.initializeOrderedBulkOp();
-    bulk.find({}).remove();
-    productsFromPromos.forEach((product) =>
-      bulk.find({ id: product.id }).upsert().replaceOne(product)
-    );
-    await bulk.execute();
+    await products_from_promos_collection.deleteMany({});
+    await products_from_promos_collection.insertMany(productsFromPromos);
+
     await updates_collection.updateOne(
       {},
       { $set: { promos: Date.now() } },
