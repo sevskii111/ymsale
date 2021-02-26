@@ -14,13 +14,10 @@ const MongoClient = require("mongodb").MongoClient;
 export default Home;
 
 export async function getStaticProps(context) {
-  const mongoClient = new MongoClient(
-    "mongodb+srv://admin:X3LWT3h2E83frAPp@cluster0.zqbcv.mongodb.net/ymsales?retryWrites=true&w=majority",
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    }
-  );
+  const mongoClient = new MongoClient("mongodb://localhost:27017/ymsale", {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
 
   const client = await mongoClient.connect();
   const db = client.db("ymsales");
@@ -72,7 +69,7 @@ export async function getStaticProps(context) {
     }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      if (product.code === "VSEMPODARKI8") continue;
+      if (product.code !== "VSEMPODARKI8") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
