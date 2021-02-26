@@ -3,13 +3,12 @@ const puppeteer = require("puppeteer");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
 let shopPromoIds;
-const { exec } = require("child_process");
+const MongoClient = require("mongodb").MongoClient;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const deploy = process.argv.indexOf("--deploy") !== -1;
 const logs = process.argv.indexOf("--logs") !== -1;
 
 const debug = process.argv.indexOf("--debug") !== -1;
@@ -359,46 +358,48 @@ async function solveCaptcha() {
     return products;
   }
 
-  while (true) {
-    try {
-      shopPromoIds = new Set();
-      if (fs.existsSync("./shopPromoIds_fast.json")) {
-        const promoIds = require("./shopPromoIds_fast.json");
-        for (const promoId of promoIds) {
-          shopPromoIds.add(promoId);
-        }
-      }
-      const promoIds = require("./shopPromoIds.json");
-      for (const promoId of promoIds) {
-        shopPromoIds.add(promoId);
-      }
-      shopPromoIds.delete("L137199");
-      shopPromoIds = [...shopPromoIds];
-
-      const scanStart = Date.now();
-      console.log("Started scan");
-      const products = await parseAllPromos();
-      if (products.length === 0) {
-        throw "WTF";
-      }
-      console.log("Finished scan");
-      const scanEnd = Date.now();
-      fs.writeFileSync(
-        "./products_with_timestamp_from_promos.json",
-        JSON.stringify({
-          scanStart,
-          scanEnd,
-          products: products,
-        })
-      );
-      if (deploy) {
-        exec("npm run deploy");
-      }
-      await sleep(10000);
-    } catch (e) {
-      console.log(e);
-      console.log("ERROR");
-      await sleep(10000);
+  const mongoClient = new MongoClient(
+    "mongodb+srv://admin:X3LWT3h2E83frAPp@cluster0.zqbcv.mongodb.net/ymsales?retryWrites=true&w=majority",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     }
+  );
+
+  const client = await mongoClient.connect();
+
+  const db = client.db("ymsales");
+  const updates_collection = db.collection("updates");
+  const products_collection = db.collection("products");
+  const products_from_promos_collection = db.collection("products_from_promos");
+
+  while (true) {
+    const products = await (await products_collection.find()).toArray();
+    shopPromoIds = products.reduce(
+      (prev, curr) => prev.add(curr.shopPromoId),
+      new Set()
+    );
+
+    shopPromoIds.delete("L137199");
+    shopPromoIds = [...shopPromoIds];
+
+    console.log("Started scan");
+    const productsFromPromos = await parseAllPromos();
+    if (products.length === 0) {
+      throw "WTF";
+    }
+
+    const bulk = products_from_promos_collection.initializeOrderedBulkOp();
+    bulk.find({}).remove();
+    productsFromPromos.forEach((product) =>
+      bulk.find({ id: product.id }).upsert().replaceOne(product)
+    );
+    await bulk.execute();
+    await updates_collection.updateOne(
+      {},
+      { $set: { promos: Date.now() } },
+      { upsert: true }
+    );
+    await sleep(10000);
   }
 })();

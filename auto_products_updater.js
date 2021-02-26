@@ -2,7 +2,6 @@ const fs = require("fs");
 const puppeteer = require("puppeteer");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
-const Gists = require("gists");
 const hids = require("./hids.js");
 const PromisePool = require("es6-promise-pool");
 
@@ -15,16 +14,6 @@ function sleep(ms) {
 const fast = process.argv.indexOf("--fast") !== -1;
 
 const logs = process.argv.indexOf("--logs") !== -1;
-
-const gist = process.argv.indexOf("--gist");
-let gists = null;
-
-if (gist !== -1) {
-  const gistApi = process.argv[gist + 1];
-  gists = new Gists({
-    token: gistApi,
-  });
-}
 
 const debug = process.argv.indexOf("--debug") !== -1;
 const captcha = process.argv.indexOf("--captcha");
@@ -168,7 +157,8 @@ async function setupBrowser() {
   const client = await mongoClient.connect();
 
   const db = client.db("ymsales");
-  const products = db.collection("products");
+  const products_collection = db.collection("products");
+  const updates_collection = db.collection("updates");
 
   let { page } = await setupBrowser();
 
@@ -597,19 +587,23 @@ async function setupBrowser() {
     return products;
   }
 
+  let allProducts = [];
+
   async function parseAllProductsForHidsAndUpload(hid) {
     const productsForHid = await parseAllProductsForHids([hid]);
     if (productsForHid.length > 0) {
-      const bulk = products.initializeUnorderedBulkOp();
+      const bulk = products_collection.initializeUnorderedBulkOp();
       for (const product of productsForHid) {
         bulk.find({ id: product.id }).upsert().replaceOne(product);
       }
       await bulk.execute();
+      allProducts = [...allProducts, ...productsForHid];
     }
     return productsForHid;
   }
 
   while (true) {
+    allProducts = [];
     console.log("Started scan");
     let i = 0;
     const promiseProducer = function () {
@@ -622,8 +616,25 @@ async function setupBrowser() {
         return null;
       }
     };
-    const pool = new PromisePool(promiseProducer, 3);
+    const pool = new PromisePool(promiseProducer, 5);
     await pool.start();
+
+    if (allProducts.length === 0) {
+      throw "No products";
+    }
+
+    const bulk = products_collection.initializeOrderedBulkOp();
+    bulk.find({}).remove();
+    allProducts.forEach((product) =>
+      bulk.find({ id: product.id }).upsert().replaceOne(product)
+    );
+    await bulk.execute();
+
+    await updates_collection.updateOne(
+      {},
+      { $set: { products: Date.now() } },
+      { upsert: true }
+    );
 
     await sleep(10000);
   }

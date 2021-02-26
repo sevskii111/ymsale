@@ -9,17 +9,35 @@ import InputRange from "react-input-range";
 import { addBackToTop } from "vanilla-back-to-top";
 import { useRouter } from "next/router";
 import Home from "./index";
+const MongoClient = require("mongodb").MongoClient;
 
 export default Home;
 
 export async function getStaticProps(context) {
+  const mongoClient = new MongoClient(
+    "mongodb+srv://admin:X3LWT3h2E83frAPp@cluster0.zqbcv.mongodb.net/ymsales?retryWrites=true&w=majority",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }
+  );
+
+  const client = await mongoClient.connect();
+  const db = client.db("ymsales");
+
+  const products_collection = db.collection("products");
+  const products_from_promos_collection = db.collection("products_from_promos");
+  const updates_collection = db.collection("updates");
+
   let codes = new Set();
-  const { products, scanEnd } = JSON.parse(
-    fs.readFileSync("./products_with_timestamp.json")
-  );
-  const { products: fastProducts, scanEnd: fastScanEnd } = JSON.parse(
-    fs.readFileSync("./products_with_timestamp_from_promos.json")
-  );
+  const products = await products_collection.find({}).toArray();
+  const fastProducts = await products_from_promos_collection.find({}).toArray();
+
+  const scanEnds = await updates_collection.findOne();
+
+  const scanEnd = scanEnds.products || 0;
+  const fastScanEnd = scanEnds.promos || 0;
+
   const unknowHids = new Set(
     JSON.parse(fs.readFileSync("./public/unknownHids.json"))
   );
@@ -54,7 +72,7 @@ export async function getStaticProps(context) {
     }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
-      if (product.code !== "VSEMPODARKI8") continue;
+      if (product.code === "VSEMPODARKI8") continue;
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
