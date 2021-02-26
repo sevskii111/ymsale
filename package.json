@@ -14,9 +14,11 @@
   },
   "dependencies": {
     "bootstrap": "^4.5.3",
+    "es6-promise-pool": "^2.5.0",
     "form-data": "^3.0.0",
     "gh-pages": "^3.1.0",
     "gists": "^2.0.0",
+    "mongodb": "^3.6.3",
     "next": "10.0.5",
     "node-fetch": "^2.6.1",
     "puppeteer": "^5.5.0",

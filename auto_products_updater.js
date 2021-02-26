@@ -4,17 +4,15 @@ const fetch = require("node-fetch");
 const FormData = require("form-data");
 const Gists = require("gists");
 const hids = require("./hids.js");
-const { exec } = require("child_process");
+const PromisePool = require("es6-promise-pool");
+
+const MongoClient = require("mongodb").MongoClient;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const fast = process.argv.indexOf("--fast") !== -1;
-
-const deploy = process.argv.indexOf("--deploy") !== -1;
-
-const promosOnly = process.argv.indexOf("--promos-only") !== -1;
 
 const logs = process.argv.indexOf("--logs") !== -1;
 
@@ -88,73 +86,93 @@ async function solveCaptcha() {
   return { solution, id };
 }
 
-(async function () {
+async function setupBrowser() {
   let browser = await puppeteer.launch(browserConfig);
-  let page = await browser.newPage();
+  let page = (await browser.pages())[0];
   page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 Edg/87.0.664.75"
   );
 
-  async function parseAllProducts() {
-    await page.goto(
-      `https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cvredirect=2&cpa=0&onstock=0&local-offers-first=0`
-    );
-    //await page.waitForNavigation({ waitUntil: "networkidle0" });
-    let captchaEl = await page.$(".captcha__image img");
-    while (captchaEl) {
-      console.log("Captcha!");
-      await captchaEl.screenshot({ path: `captcha.png` });
-      const { solution, id } = await solveCaptcha();
-      await page.focus("input");
-      await page.keyboard.type(solution);
-      await page.click("button");
-      await page.waitForNavigation();
-      await sleep(5000);
-      captchaEl = await page.$(".captcha__image img");
-      console.log(solution);
-      if (captchaEl) {
-        console.log("Captcha failed!");
-        await fetch(
-          `http://rucaptcha.com/res.php?key=${captchaApi}&action=reportbad&id=${id}`
-        );
-      } else {
-        console.log("Captcha solved!");
-        await fetch(
-          `http://rucaptcha.com/res.php?key=${captchaApi}&action=reportgood&id=${id}`
-        );
-      }
+  await page.goto(
+    `https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cvredirect=2&cpa=0&onstock=0&local-offers-first=0`
+  );
+  //await page.waitForNavigation();
+  await sleep(5000);
+  let captchaEl = await page.$(".captcha__image img");
+  while (captchaEl) {
+    console.log("Captcha!");
+    await captchaEl.screenshot({ path: `captcha.png` });
+    const { solution, id } = await solveCaptcha();
+    await page.focus("input");
+    await page.keyboard.type(solution);
+    await page.click("button");
+    await page.waitForNavigation();
+    await sleep(5000);
+    captchaEl = await page.$(".captcha__image img");
+    console.log(solution);
+    if (captchaEl) {
+      console.log("Captcha failed!");
+      await fetch(
+        `http://rucaptcha.com/res.php?key=${captchaApi}&action=reportbad&id=${id}`
+      );
+    } else {
+      console.log("Captcha solved!");
+      await fetch(
+        `http://rucaptcha.com/res.php?key=${captchaApi}&action=reportgood&id=${id}`
+      );
     }
-    console.log("Setting up browser...");
-    await sleep(5000);
-    await page.evaluate(async () => {
-      await fetch("https://market.yandex.ru/api/settings/region", {
-        headers: {
-          accept: "*/*",
-          "accept-language": "en-US,en;q=0.9,ru;q=0.8",
-          "cache-control": "no-cache",
-          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-          pragma: "no-cache",
-          "sec-fetch-dest": "empty",
-          "sec-fetch-mode": "cors",
-          "sec-fetch-site": "same-origin",
-          sk: window.state.user.sk,
-        },
-        referrer:
-          "https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cpa=0&lr=213&onstock=0&local-offers-first=0",
-        referrerPolicy: "unsafe-url",
-        body: "options=%7B%22region%22%3A%22213%22%7D",
-        method: "POST",
-        mode: "cors",
-        credentials: "include",
-      });
-      try {
-        document
-          .querySelector(".zsSJkfeAPw._16jABpOZ2-._36y1jOUHs5.XAAXSBumqa")
-          .click();
-      } catch (e) {}
+  }
+  console.log("Setting up browser...");
+  await page.evaluate(async () => {
+    await fetch("https://market.yandex.ru/api/settings/region", {
+      headers: {
+        accept: "*/*",
+        "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+        "cache-control": "no-cache",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        pragma: "no-cache",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        sk: window.state.user.sk,
+      },
+      referrer:
+        "https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cpa=0&lr=213&onstock=0&local-offers-first=0",
+      referrerPolicy: "unsafe-url",
+      body: "options=%7B%22region%22%3A%22213%22%7D",
+      method: "POST",
+      mode: "cors",
+      credentials: "include",
     });
-    await sleep(5000);
+    try {
+      document
+        .querySelector(".zsSJkfeAPw._16jABpOZ2-._36y1jOUHs5.XAAXSBumqa")
+        .click();
+    } catch (e) {
+      console.log("Can't set region!");
+    }
+  });
+  await sleep(5000);
+  return { browser, page };
+}
 
+(async function () {
+  const mongoClient = new MongoClient(
+    "mongodb+srv://admin:X3LWT3h2E83frAPp@cluster0.zqbcv.mongodb.net/ymsales?retryWrites=true&w=majority",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }
+  );
+
+  const client = await mongoClient.connect();
+
+  const db = client.db("ymsales");
+  const products = db.collection("products");
+
+  let { page } = await setupBrowser();
+
+  async function parseAllProductsForHids(hids) {
     const products = await page.evaluate(
       async (fast, hids) => {
         /////////////////////////////////////////////////////////////////////////////
@@ -579,65 +597,34 @@ async function solveCaptcha() {
     return products;
   }
 
-  while (true) {
-    try {
-      const scanStart = Date.now();
-      console.log("Started scan");
-      const products = await parseAllProducts();
-      if (products.length === 0) {
-        throw "WTF";
+  async function parseAllProductsForHidsAndUpload(hid) {
+    const productsForHid = await parseAllProductsForHids([hid]);
+    if (productsForHid.length > 0) {
+      const bulk = products.initializeUnorderedBulkOp();
+      for (const product of productsForHid) {
+        bulk.find({ id: product.id }).upsert().replaceOne(product);
       }
-      console.log("Finished scan");
-      const scanEnd = Date.now();
-      if (gists) {
-        gists.edit("0d5a05ba41c17876762df3b263106ab0", {
-          files: {
-            "all_products_auto.json": {
-              content: JSON.stringify({
-                scanStart,
-                scanEnd,
-                products: products,
-              }),
-            },
-          },
-        });
-      }
-      if (!promosOnly) {
-        fs.writeFileSync(
-          "./shopPromoIds.json",
-          JSON.stringify([
-            ...products.reduce(
-              (prev, curr) => prev.add(curr.shopPromoId),
-              new Set()
-            ),
-          ])
-        );
-        fs.writeFileSync(
-          "./products_with_timestamp.json",
-          JSON.stringify({
-            scanStart,
-            scanEnd,
-            products: products,
-          })
-        );
-      } else {
-        fs.writeFileSync(
-          "./shopPromoIds_fast.json",
-          JSON.stringify([
-            ...products.reduce(
-              (prev, curr) => prev.add(curr.shopPromoId),
-              new Set()
-            ),
-          ])
-        );
-      }
-      if (deploy) {
-        exec("npm run deploy");
-      }
-      await sleep(10000);
-    } catch (e) {
-      console.log(e);
-      await sleep(10000);
+      await bulk.execute();
     }
+    return productsForHid;
+  }
+
+  while (true) {
+    console.log("Started scan");
+    let i = 0;
+    const promiseProducer = function () {
+      if (i < hids.length) {
+        const hid = hids[i];
+        i++;
+        console.log(hid.hid, `${i}/${hids.length}`);
+        return parseAllProductsForHidsAndUpload(hid);
+      } else {
+        return null;
+      }
+    };
+    const pool = new PromisePool(promiseProducer, 3);
+    await pool.start();
+
+    await sleep(10000);
   }
 })();
