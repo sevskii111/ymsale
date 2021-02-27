@@ -371,10 +371,12 @@ async function solveCaptcha() {
   const db = client.db("ymsales");
   const updates_collection = db.collection("updates");
   const products_collection = db.collection("products");
-  const products_from_promos_collection = db.collection("products_from_promos");
 
   while (true) {
-    const products = await (await products_collection.find()).toArray();
+    const products = [
+      ...(await products_collection.find().toArray()),
+      ...require("./products_from_search.json"),
+    ];
     shopPromoIds = products.reduce(
       (prev, curr) => prev.add(curr.shopPromoId),
       new Set()
@@ -389,8 +391,12 @@ async function solveCaptcha() {
       throw "WTF";
     }
 
+    fs.writeFileSync(
+      "./products_from_promos.json",
+      JSON.stringify(productsFromPromos)
+    );
     await products_from_promos_collection.deleteMany({});
-    await products_from_promos_collection.insertMany(productsFromPromos);
+    //await products_from_promos_collection.insertMany(productsFromPromos);
 
     await updates_collection.updateOne(
       {},

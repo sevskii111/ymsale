@@ -491,14 +491,16 @@ export async function getStaticProps(context) {
   const db = client.db("ymsales");
 
   const products_collection = db.collection("products");
-  const products_from_promos_collection = db.collection("products_from_promos");
   const updates_collection = db.collection("updates");
 
   let codes = new Set();
-  const products = await products_collection.find({}).toArray();
-  const fastProducts = await products_from_promos_collection.find({}).toArray();
+  const products = [
+    ...(await products_collection.find({}).toArray()),
+    ...require("../products_from_search.json"),
+  ];
+  const fastProducts = require("../products_from_promos.json");
 
-  const scanEnds = await updates_collection.findOne();
+  const scanEnds = (await updates_collection.findOne()) || {};
 
   const scanEnd = scanEnds.products || 0;
   const fastScanEnd = scanEnds.promos || 0;

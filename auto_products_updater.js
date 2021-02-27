@@ -2,7 +2,7 @@ const fs = require("fs");
 const puppeteer = require("puppeteer");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
-const hids = require("./hids.js");
+let hids = require("./hids.js");
 const PromisePool = require("es6-promise-pool");
 
 const MongoClient = require("mongodb").MongoClient;
@@ -603,6 +603,7 @@ async function setupBrowser() {
   }
 
   while (true) {
+    hids = require("./hids.js");
     allProducts = [];
     console.log("Started scan");
     let i = 0;
@@ -623,8 +624,12 @@ async function setupBrowser() {
       throw "No products";
     }
 
+    fs.writeFileSync(
+      "../products_from_search.json",
+      JSON.stringify(allProducts)
+    );
     await products_collection.deleteMany({});
-    await products_collection.insertMany(allProducts);
+    //await products_collection.insertMany(allProducts);
 
     await updates_collection.updateOne(
       {},
