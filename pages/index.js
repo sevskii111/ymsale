@@ -616,6 +616,12 @@ export async function getStaticProps(context) {
         (parseInt(a.real_discount) + 0.1 || 0.5)
     );
 
+  const wtf_products = products_sorted.filter((p) => !p.category);
+  if (wtf_products.length) {
+    console.log("No category for:");
+    console.log(wtf_products);
+  }
+
   return {
     props: {
       codes: codes,
