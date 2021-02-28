@@ -620,7 +620,7 @@ export async function getStaticProps(context) {
     props: {
       codes: codes,
       hierarchy: categoriesHierarhyNew.hierarchy,
-      parentCategories: categoriesHierarhyNew.parentCategories,
+      parentCategories: categoriesHierarhyNew.parentCategories.sort(),
       products: products_sorted.map((product) => ({
         name: product.name,
         img: product.img
