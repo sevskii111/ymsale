@@ -371,6 +371,9 @@ async function solveCaptcha() {
   const db = client.db("ymsales");
   const updates_collection = db.collection("updates");
   const products_collection = db.collection("products");
+  const products_from_promos_collection = db.collection(
+    "products_from_promos_collection"
+  );
 
   while (true) {
     const products = [

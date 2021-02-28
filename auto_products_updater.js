@@ -594,7 +594,10 @@ async function setupBrowser() {
     if (productsForHid.length > 0) {
       const bulk = products_collection.initializeUnorderedBulkOp();
       for (const product of productsForHid) {
-        bulk.find({ id: product.id }).upsert().replaceOne(product);
+        bulk
+          .find({ id: product.id })
+          .upsert()
+          .replaceOne({ ...product, timestamp: Date.now() });
       }
       await bulk.execute();
       allProducts = [...allProducts, ...productsForHid];
@@ -628,7 +631,9 @@ async function setupBrowser() {
       "../products_from_search.json",
       JSON.stringify(allProducts)
     );
-    await products_collection.deleteMany({});
+    await products_collection.deleteMany({
+      timestamp: { $lt: Date.now() - 1.728e8 },
+    });
     //await products_collection.insertMany(allProducts);
 
     await updates_collection.updateOne(
