@@ -608,7 +608,7 @@ export async function getStaticProps(context) {
 
   console.log(Object.values(uniqueProducts)[0]);
 
-  const products_sorted = Object.values(uniqueProducts)
+  let products_sorted = Object.values(uniqueProducts)
     .filter((product) => product.code !== "VSEMPODARKI8")
     .sort(
       (a, b) =>
@@ -616,11 +616,17 @@ export async function getStaticProps(context) {
         (parseInt(a.real_discount) + 0.1 || 0.5)
     );
 
-  const wtf_products = products_sorted.filter((p) => !p.category);
-  if (wtf_products.length) {
+  const wtf_products = products_sorted.filter(
+    (p) => !p.category || !categoriesIds[p.category]
+  );
+  if (wtf_products.length == 0) {
     console.log("No category for:");
     console.log(wtf_products);
   }
+
+  products_sorted = products_sorted.filter(
+    (p) => !!p.category && categoriesIds[p.category]
+  );
 
   return {
     props: {
