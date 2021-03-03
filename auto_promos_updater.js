@@ -258,6 +258,11 @@ async function solveCaptcha() {
       }
 
       async function loadProducts() {
+        if (!window.state) {
+          console.log("No winodw state");
+          console.log(window.location.href);
+          console.log(document.querySelector("html").innerHTML);
+        }
         const lazyRender = await fetch(
           "https://pokupki.market.yandex.ru/api/render-lazy",
           {
