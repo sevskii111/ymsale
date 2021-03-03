@@ -620,7 +620,7 @@ async function setupBrowser() {
         return null;
       }
     };
-    const pool = new PromisePool(promiseProducer, 5);
+    const pool = new PromisePool(promiseProducer, 3);
     await pool.start();
 
     if (allProducts.length === 0) {
