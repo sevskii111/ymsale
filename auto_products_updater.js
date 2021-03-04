@@ -174,7 +174,7 @@ async function setupBrowser() {
           let result = {};
 
           for (const _offerShowPlace of Object.values(offerShowPlace)) {
-            result[_offerShowPlace.showUid] = _offerShowPlace.offerId;
+            result[_offerShowPlace.id] = _offerShowPlace.offerId;
           }
           return result;
         }
@@ -223,9 +223,12 @@ async function setupBrowser() {
 
           for (const _product of Object.values(product)) {
             let showPlaceIds = _product.showPlaceIds;
+            // console.log(product);
             const min_price = _product.prices ? _product.prices.min : Infinity;
             if (showPlaceIds) {
               for (const showPlaceId of showPlaceIds) {
+                // console.log(showPlaceId);
+
                 // if (!showPlaceId.showUid) {
                 //   console.log("WTF");
                 //   console.log(showPlaceId);
@@ -248,17 +251,18 @@ async function setupBrowser() {
                   }
                 }
 
+                // console.log(_product);
                 result.filledProducts[showPlaceId.showUid] = {
                   product_id: _product.id,
-                  uid: showPlaceId.showUid,
-                  name: showPlaceId.titles.raw,
+                  uid: showPlaceId,
+                  // name: showPlaceId.titles.raw,
                   min_price: min_price,
-                  img: showPlaceId.pictures
-                    ? showPlaceId.pictures[0].original.url.replace(
-                        "orig",
-                        "50x50"
-                      )
-                    : null,
+                  // img: showPlaceId.pictures
+                  //   ? showPlaceId.pictures[0].original.url.replace(
+                  //       "orig",
+                  //       "50x50"
+                  //     )
+                  //   : null,
                   ...offer,
                 };
               }
@@ -273,13 +277,17 @@ async function setupBrowser() {
         }
 
         function parseCollections(collections) {
+          // console.log(JSON.stringify(collections));
           const offerShowPlaces = parseOfferShowPlace(
             collections.offerShowPlace
           );
           const offers = parseOffer(collections.offer);
           const products = parseProduct(collections.product);
+          // console.log("---------------------------------");
           // console.log(offerShowPlaces);
+          // console.log("------------------------------");
           // console.log(offers);
+          // console.log("------------------------------");
           // console.log(products);
 
           let filledResult = [];
@@ -291,20 +299,20 @@ async function setupBrowser() {
                 ...product,
               });
             }
-            const offerShowPlace = offerShowPlaces[productId];
+            const offerShowPlace = offerShowPlaces[product.uid];
             const offer = offers[offerShowPlace];
 
             if (!offer) {
-              // console.log("No offer for product");
-              // console.log(product);
-              // console.log(offerShowPlace);
+              console.log("No offer for product");
+              console.log(product);
+              console.log(offerShowPlace);
               continue;
             }
-            if (offer.img !== product.img || offer.title !== product.title) {
-              console.log("Offer and product are different");
-              console.log(offer);
-              console.log(product);
-            }
+            // if (offer.img !== product.img || offer.title !== product.title) {
+            //   console.log("Offer and product are different");
+            //   console.log(offer);
+            //   console.log(product);
+            // }
             filledResult.push({
               ...product,
               ...offer,
@@ -631,9 +639,9 @@ async function setupBrowser() {
       "../products_from_search.json",
       JSON.stringify(allProducts)
     );
-    await products_collection.deleteMany({
-      timestamp: { $lt: Date.now() - 1.728e8 },
-    });
+    // await products_collection.deleteMany({
+    //   timestamp: { $lt: Date.now() - 1.728e8 },
+    // });
     //await products_collection.insertMany(allProducts);
 
     await updates_collection.updateOne(

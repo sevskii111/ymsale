@@ -235,7 +235,7 @@ async function solveCaptcha() {
                 referrer:
                   "https://pokupki.market.yandex.ru/special/promo-code-landing?shopPromoId=L136267",
                 referrerPolicy: "unsafe-url",
-                body: `{\"n\":100,\"memento\":\"${memento}\"}`,
+                body: `{\"n\":50,\"memento\":\"${memento}\"}`,
                 method: "POST",
                 mode: "cors",
                 credentials: "include",
