@@ -552,7 +552,7 @@ export async function getStaticProps(context) {
         product.min_price < uniqueProducts[product.id].old_price
           ? product.min_price - uniqueProducts[product.id].price
           : "?";
-      uniqueProducts[product.id].img = product.img;
+      //uniqueProducts[product.id].img = product.img;
     }
     if (product.min_price > product.old_price) {
       bad_prices.push(product);
