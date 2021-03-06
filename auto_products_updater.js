@@ -174,44 +174,32 @@ async function setupBrowser() {
           let result = {};
 
           for (const _offerShowPlace of Object.values(offerShowPlace)) {
-            result[_offerShowPlace.id] = _offerShowPlace.offerId;
+            for (const promoId of _offerShowPlace.promoIds) {
+              if (!result[_offerShowPlace.id])
+                if (!_offerShowPlace.urls.direct.match(/\/(\d+)/)) {
+                  console.log(JSON.stringify(offerShowPlace, null, 2));
+                }
+              result[_offerShowPlace.id] = {
+                promos: [],
+                id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[1],
+              };
+              result[_offerShowPlace.id].promos.push(promoId);
+            }
           }
           return result;
         }
 
-        function findBestPromo(promos) {
-          return promos
-            .filter(
-              (promo) =>
-                promo.type === "promo-code" &&
-                promo.mechanicsPaymentType === "CPA"
-            )
-            .sort(
-              (a, b) =>
-                a.itemsInfo.promoPrice.value - b.itemsInfo.promoPrice.value
-            )[0];
-        }
-
-        function parseOffer(offer) {
+        function parsePromo(promo) {
           let result = {};
 
-          for (const _offer of Object.values(offer)) {
-            const promos = _offer.promos;
-            const bestPromo = findBestPromo(promos);
-            if (!bestPromo) {
-              continue;
-            }
-            const itemsInfo = bestPromo.itemsInfo;
-            result[_offer.id] = {
-              id: _offer.marketSku || _offer.productId,
-              name: _offer.titles.raw,
-              code: itemsInfo.promoCode,
-              shopPromoId: bestPromo.shopPromoId,
-              old_price: itemsInfo.promoPrice.discount.oldMin,
-              price: itemsInfo.promoPrice.value,
-              img: _offer.pictures
-                ? _offer.pictures[0].original.url.replace("orig", "50x50")
-                : null,
+          for (const _promo of Object.values(promo)) {
+            if (_promo.type !== "promo-code") continue;
+            const itemsInfo = _promo.itemsInfo;
+            result[_promo.id] = {
+              code: _promo.promoCode,
+              shopPromoId: _promo.shopPromoId,
+              old_price: itemsInfo.price.oldPrice.value,
+              price: itemsInfo.price.currentPrice.value,
             };
           }
 
@@ -223,100 +211,57 @@ async function setupBrowser() {
 
           for (const _product of Object.values(product)) {
             let showPlaceIds = _product.showPlaceIds;
-            // console.log(product);
-            const min_price = _product.prices ? _product.prices.min : Infinity;
             if (showPlaceIds) {
+              const img = _product.pictures
+                ? _product.pictures[0].original
+                : null;
+
               for (const showPlaceId of showPlaceIds) {
-                // console.log(showPlaceId);
-
-                // if (!showPlaceId.showUid) {
-                //   console.log("WTF");
-                //   console.log(showPlaceId);
-                //   console.log(_product);
-                // }
-                let offer = {};
-                if ((offer.id = showPlaceId.marketSku)) {
-                  offer.id = showPlaceId.marketSku;
-                }
-                if (showPlaceId.promos) {
-                  const bestPromo = findBestPromo(showPlaceId.promos);
-                  if (bestPromo) {
-                    const itemsInfo = bestPromo.itemsInfo;
-                    offer.code = itemsInfo.promoCode;
-                    offer.shopPromoId = bestPromo.shopPromoId;
-                    offer.old_price = itemsInfo.promoPrice.discount.oldMin;
-                    offer.price = itemsInfo.promoPrice.value;
-                  } else {
-                    //console.log("NO BEST PROMO FOUND");
-                  }
-                }
-
-                // console.log(_product);
-                result.filledProducts[showPlaceId.showUid] = {
-                  product_id: _product.id,
+                result.filledProducts[showPlaceId] = {
                   uid: showPlaceId,
-                  // name: showPlaceId.titles.raw,
-                  min_price: min_price,
-                  // img: showPlaceId.pictures
-                  //   ? showPlaceId.pictures[0].original.url.replace(
-                  //       "orig",
-                  //       "50x50"
-                  //     )
-                  //   : null,
-                  ...offer,
+                  name: _product.titles.raw,
+                  img: img
+                    ? `https://avatars.mds.yandex.net/get-mpic/${img.groupId}/${img.key}/50x50`
+                    : null,
+                  hid: _product.categoryIds[0],
                 };
               }
             } else {
-              result.unfilledProducts[_product.id] = {
-                title: _product.titles.raw,
-                min_price: min_price,
-              };
+              console.log(`No showplaceid for ${JSON.stringify(_product)}`);
             }
           }
           return result;
         }
 
         function parseCollections(collections) {
-          // console.log(JSON.stringify(collections));
           const offerShowPlaces = parseOfferShowPlace(
             collections.offerShowPlace
           );
-          const offers = parseOffer(collections.offer);
+          // console.log(JSON.stringify(offerShowPlaces, null, 2));
+          const promos = parsePromo(collections.promo);
+          // console.log(JSON.stringify(promos, null, 2));
           const products = parseProduct(collections.product);
-          // console.log("---------------------------------");
-          // console.log(offerShowPlaces);
-          // console.log("------------------------------");
-          // console.log(offers);
-          // console.log("------------------------------");
-          // console.log(products);
+          //console.log(JSON.stringify(products, null, 2));
 
           let filledResult = [];
 
           for (const productId in products.filledProducts) {
             const product = products.filledProducts[productId];
-            if (product.shopPromoId) {
+            const offerShowPlace = offerShowPlaces[productId].promos;
+            for (const promoId of offerShowPlace) {
+              const promo = promos[promoId];
+              if (!promo) {
+                console.log("No offer for product");
+                // console.log(JSON.stringify(product));
+                // console.log(JSON.stringify(offerShowPlace));
+                continue;
+              }
               filledResult.push({
                 ...product,
+                ...promo,
+                id: offerShowPlaces[productId].id,
               });
             }
-            const offerShowPlace = offerShowPlaces[product.uid];
-            const offer = offers[offerShowPlace];
-
-            if (!offer) {
-              console.log("No offer for product");
-              console.log(product);
-              console.log(offerShowPlace);
-              continue;
-            }
-            // if (offer.img !== product.img || offer.title !== product.title) {
-            //   console.log("Offer and product are different");
-            //   console.log(offer);
-            //   console.log(product);
-            // }
-            filledResult.push({
-              ...product,
-              ...offer,
-            });
           }
 
           let unfilledResult = [];
@@ -327,7 +272,6 @@ async function setupBrowser() {
               title: products.unfilledProducts[productId].title,
             });
           }
-
           return {
             filledProducts: filledResult,
             unfilledProducts: unfilledResult,
