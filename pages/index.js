@@ -609,7 +609,14 @@ export async function getStaticProps(context) {
   console.log(Object.values(uniqueProducts)[0]);
 
   let products_sorted = Object.values(uniqueProducts)
-    .filter((product) => product.code !== "VSEMPODARKI8")
+    .filter(
+      (product) =>
+        product.code !== "VSEMPODARKI8" &&
+        product.code !== "DIY03_A1000" &&
+        product.code !== "DIY03_10" &&
+        product.code !== "DIY03_S10" &&
+        product.code !== "DIY03_T10"
+    )
     .sort(
       (a, b) =>
         (parseInt(b.real_discount) + 0.1 || 0.5) -
@@ -619,13 +626,13 @@ export async function getStaticProps(context) {
   const wtf_products = products_sorted.filter(
     (p) => !p.category || !categoriesIds[p.category]
   );
-  if (wtf_products.length == 0) {
+  if (wtf_products.length > 0) {
     console.log("No category for:");
     console.log(wtf_products);
   }
 
   products_sorted = products_sorted.filter(
-    (p) => !!p.category && categoriesIds[p.category]
+    (p) => !!p.category && categoriesIds[p.category] && p.price < p.old_price
   );
 
   return {
