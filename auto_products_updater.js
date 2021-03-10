@@ -125,12 +125,13 @@ async function setupBrowser() {
     console.log("Got soulution");
     await page.focus("input");
     await page.keyboard.type(solution);
-    await sleep(2000);
-    await page.click("button");
-    await sleep(2000);
-    await page.click("button");
-    //await page.waitForNavigation();
-    await sleep(20000);
+    const button = await page.$("button");
+    await button.click({
+      button: "left",
+    });
+
+    await page.waitForNavigation();
+    await sleep(5000);
     captchaEl = await page.$(".captcha__image img");
     console.log(solution);
     if (captchaEl) {
