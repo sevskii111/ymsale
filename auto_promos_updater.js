@@ -114,11 +114,12 @@ async function solveCaptcha() {
       console.log("Captcha!");
       await captchaEl.screenshot({ path: `captcha.png` });
       const { solution, id } = await solveCaptcha();
+      console.log("Got solution!");
       await page.focus("input");
       await page.keyboard.type(solution);
       await page.click("button");
-      await page.waitForNavigation();
-      await sleep(5000);
+      //await page.waitForNavigation();
+      await sleep(20000);
       captchaEl = await page.$(".captcha__image img");
       console.log(solution);
       if (captchaEl) {
