@@ -44,6 +44,24 @@ if (root) {
   browserConfig.args.push("--no-sandbox");
 }
 
+function timeout(ms, promise) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("TIMEOUT"));
+    }, ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((reason) => {
+        clearTimeout(timer);
+        reject(reason);
+      });
+  });
+}
+
 async function solveCaptcha() {
   const formData = new FormData();
   formData.append("key", captchaApi);
@@ -57,16 +75,26 @@ async function solveCaptcha() {
   ).match(/\d+/)[0];
 
   let solution;
-  await sleep(1000);
+  await sleep(5000);
 
+  let a = 0;
   while (!solution) {
-    const res = await fetch(
-      `http://rucaptcha.com/res.php?key=${captchaApi}&action=get&id=${id}&json=1`
-    ).then((res) => res.json());
-    if (res.request !== "CAPCHA_NOT_READY") {
-      solution = res.request;
+    a++;
+    if (a > 100) {
+      throw "Error";
     }
-    await sleep(500);
+    try {
+      const res = await timeout(
+        5000,
+        fetch(
+          `http://rucaptcha.com/res.php?key=${captchaApi}&action=get&id=${id}&json=1`
+        ).then((res) => res.json())
+      );
+      if (res.request !== "CAPCHA_NOT_READY") {
+        solution = res.request;
+      }
+    } catch (e) {}
+    await sleep(1000);
   }
   return { solution, id };
 }
