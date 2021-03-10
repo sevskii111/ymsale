@@ -74,6 +74,7 @@ async function solveCaptcha() {
     }).then((res) => res.text())
   ).match(/\d+/)[0];
 
+  console.log("Sent captcha!");
   let solution;
   await sleep(5000);
 
@@ -90,6 +91,7 @@ async function solveCaptcha() {
           `http://rucaptcha.com/res.php?key=${captchaApi}&action=get&id=${id}&json=1`
         ).then((res) => res.json())
       );
+      console.log("Ping captcha");
       if (res.request !== "CAPCHA_NOT_READY") {
         solution = res.request;
       }
