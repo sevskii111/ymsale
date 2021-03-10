@@ -125,6 +125,9 @@ async function setupBrowser() {
     console.log("Got soulution");
     await page.focus("input");
     await page.keyboard.type(solution);
+    await sleep(2000);
+    await page.click("button");
+    await sleep(2000);
     await page.click("button");
     //await page.waitForNavigation();
     await sleep(20000);
