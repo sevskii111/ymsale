@@ -115,24 +115,37 @@ async function setupBrowser() {
   await page.goto(
     `https://market.yandex.ru/search?text=%D0%9F%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B0%D1%82%D0%B8%D0%B2%D1%8B&cvredirect=2&cpa=0&onstock=0&local-offers-first=0`
   );
+
   //await page.waitForNavigation();
-  await sleep(5000);
-  let captchaEl = await page.$(".captcha__image img");
+  await sleep(10000);
+  let captchaEl = await page.$(".CheckboxCaptcha");
   while (captchaEl) {
     console.log("Captcha!");
+    const rect = await page.evaluate((el) => {
+      const { x, y } = el.getBoundingClientRect();
+      return { x, y };
+    }, captchaEl);
+
+    const offset = { x: 10, y: 10 };
+
+    await page.mouse.click(rect.x + offset.x, rect.y + offset.y);
+
+    console.log("Captcha clicked!");
+    await sleep(5000);
+    captchaEl = await page.$("img.AdvancedCaptcha-Image");
     await captchaEl.screenshot({ path: `captcha.png` });
     const { solution, id } = await solveCaptcha();
     console.log("Got soulution");
     await page.focus("input");
     await page.keyboard.type(solution);
-    const button = await page.$("button");
+    const button = await page.$("button[type='submit']");
     await button.click({
       button: "left",
     });
 
     await page.waitForNavigation();
     await sleep(5000);
-    captchaEl = await page.$(".captcha__image img");
+    captchaEl = await page.$("img.AdvancedCaptcha-Image");
     console.log(solution);
     if (captchaEl) {
       console.log("Captcha failed!");

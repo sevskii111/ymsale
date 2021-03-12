@@ -615,6 +615,8 @@ export async function getStaticProps(context) {
         product.code !== "DIY03_A1000" &&
         product.code !== "DIY03_10" &&
         product.code !== "DIY03_S10" &&
+        product.code !== "AVTO1000" &&
+        product.code !== "DIY0310" &&
         product.code !== "DIY03_T10"
     )
     .sort(

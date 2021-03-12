@@ -266,7 +266,7 @@ async function solveCaptcha() {
                 referrer:
                   "https://pokupki.market.yandex.ru/special/promo-code-landing?shopPromoId=L136267",
                 referrerPolicy: "unsafe-url",
-                body: `{\"n\":50,\"memento\":\"${memento}\"}`,
+                body: `{\"n\":200,\"memento\":\"${memento}\"}`,
                 method: "POST",
                 mode: "cors",
                 credentials: "include",
@@ -412,17 +412,24 @@ async function solveCaptcha() {
   );
 
   while (true) {
+    console.log("here");
     const products = [
-      ...(await products_collection.find().toArray()),
+      ...(await products_collection.distinct("shopPromoId")).map((spi) => ({
+        shopPromoId: spi,
+      })),
       ...require("./products_from_search.json"),
     ];
+    console.log("And there");
     shopPromoIds = products.reduce(
       (prev, curr) => prev.add(curr.shopPromoId),
       new Set()
     );
 
     shopPromoIds.delete("L137199");
+    shopPromoIds.delete(null);
     shopPromoIds = [...shopPromoIds];
+
+    console.log(shopPromoIds);
 
     console.log("Started scan");
     const productsFromPromos = await parseAllPromos();
