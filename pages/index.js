@@ -412,13 +412,6 @@ export default function Home({
         </Container>
       </main>
       <footer className="bg-secondary text-white py-0 w-100">
-        <Alert color="success" className="mb-0" fade={false}>
-          <p className="mb-0">
-            Товары по промокоду VSEMPODARKI8 доступны на{" "}
-            <a href="/vsempodarki">отдельной странице</a>. Cписок не полный и
-            может быть интересен только реальной выгодой на товары.
-          </p>
-        </Alert>
         <Alert color="secondary" className="mb-0" fade={false}>
           <p className="mb-0">
             Последнее обновление списка товаров:{" "}
