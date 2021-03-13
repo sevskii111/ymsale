@@ -225,7 +225,8 @@ async function setupBrowser() {
             for (const promoId of _offerShowPlace.promoIds) {
               if (!result[_offerShowPlace.id])
                 if (!_offerShowPlace.urls.direct.match(/\/(\d+)/)) {
-                  console.log(JSON.stringify(offerShowPlace, null, 2));
+                  //console.log(JSON.stringify(offerShowPlace, null, 2));
+                  continue;
                 }
               result[_offerShowPlace.id] = {
                 promos: [],
@@ -295,6 +296,9 @@ async function setupBrowser() {
 
           for (const productId in products.filledProducts) {
             const product = products.filledProducts[productId];
+            if (!offerShowPlaces[productId]) {
+              continue;
+            }
             const offerShowPlace = offerShowPlaces[productId].promos;
             for (const promoId of offerShowPlace) {
               const promo = promos[promoId];
