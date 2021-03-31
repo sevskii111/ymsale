@@ -440,7 +440,7 @@ export default function Home({
             {useRefLinks ? "отключить" : "включить"}
           </span>
           ) . Для некоторых товаров имеется колонка "Реальная выгода", она
-          показывает разницу с минимальной ценой на товар по маректу в Москве
+          показывает разницу с минимальной ценой на товар по маркету в Москве
           (за идею спасибо{" "}
           <a href="https://www.pepper.ru/profile/Rustik_Ufa">Rustik_Ufa</a>).
           Обратную связь по сайту, можете написать мне в{" "}
@@ -536,12 +536,14 @@ export async function getStaticProps(context) {
       uniqueProducts[product.id] = {
         ...product,
         real_discount:
-          product.min_price < product.old_price
+          product.min_price &&
+          product.min_price < uniqueProducts[product.id].old_price
             ? product.min_price - product.price
             : "?",
       };
     } else {
       uniqueProducts[product.id].real_discount =
+        product.min_price &&
         product.min_price < uniqueProducts[product.id].old_price
           ? product.min_price - uniqueProducts[product.id].price
           : "?";
