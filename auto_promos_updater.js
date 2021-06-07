@@ -144,18 +144,9 @@ async function solveCaptcha() {
         let result = {};
 
         for (const _offerShowPlace of Object.values(offerShowPlace)) {
-          for (const promoId of _offerShowPlace.promoIds) {
-            if (!result[_offerShowPlace.id])
-              if (!_offerShowPlace.urls.direct.match(/\/(\d+)/)) {
-                console.log(JSON.stringify(offerShowPlace, null, 2));
-              }
-            result[_offerShowPlace.id] = {
-              promos: [],
-              id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[1],
-            };
-            result[_offerShowPlace.id].promos.push(promoId);
-          }
+          result[_offerShowPlace.offerId] = _offerShowPlace.promoIds;
         }
+
         return result;
       }
 
@@ -176,29 +167,20 @@ async function solveCaptcha() {
         return result;
       }
 
-      function parseProduct(product) {
-        let result = { filledProducts: {}, unfilledProducts: {} };
+      function parseOffer(offer) {
+        let result = {};
 
-        for (const _product of Object.values(product)) {
-          let showPlaceIds = _product.showPlaceIds;
-          if (showPlaceIds) {
-            const img = _product.pictures
-              ? _product.pictures[0].original
-              : null;
-
-            for (const showPlaceId of showPlaceIds) {
-              result.filledProducts[showPlaceId] = {
-                uid: showPlaceId,
-                name: _product.titles.raw,
-                img: img
-                  ? `https://avatars.mds.yandex.net/get-mpic/${img.groupId}/${img.key}/50x50`
-                  : null,
-                hid: _product.categoryIds[0],
-              };
-            }
-          } else {
-            console.log(`No showplaceid for ${JSON.stringify(_product)}`);
-          }
+        for (const _offer of Object.values(offer)) {
+          const img = _offer.pictures ? _offer.pictures[0].original : null;
+          let imgUrl = null;
+          result[_offer.id] = {
+            name: _offer.titles.raw,
+            img: img
+              ? `https://avatars.mds.yandex.net/get-${img.namespace}/${img.groupId}/${img.key}/50x50`
+              : null,
+            hid: _offer.categoryIds[0],
+            id: _offer.marketSku || _offer.productId,
+          };
         }
         return result;
       }
@@ -208,47 +190,44 @@ async function solveCaptcha() {
         // console.log(JSON.stringify(offerShowPlaces, null, 2));
         const promos = parsePromo(collections.promo);
         // console.log(JSON.stringify(promos, null, 2));
-        const products = parseProduct(collections.product);
+        const offers = parseOffer(collections.offer);
         //console.log(JSON.stringify(products, null, 2));
 
-        let filledResult = [];
+        let result = [];
 
-        for (const productId in products.filledProducts) {
-          const product = products.filledProducts[productId];
-          const offerShowPlace = offerShowPlaces[productId].promos;
-          for (const promoId of offerShowPlace) {
+        for (const offerId in offerShowPlaces) {
+          const offer = offers[offerId];
+          const offerPromos = offerShowPlaces[offerId];
+          let foundPromo = false;
+          for (const promoId of offerPromos) {
             const promo = promos[promoId];
             if (!promo) {
-              console.log("No offer for product");
-              console.log(JSON.stringify(product));
-              console.log(JSON.stringify(offerShowPlace));
               continue;
             }
-            filledResult.push({
-              ...product,
+            foundPromo = true;
+            result.push({
+              ...offer,
               ...promo,
-              id: offerShowPlaces[productId].id,
             });
+          }
+          if (!foundPromo) {
+            console.log("No offer for product");
+            console.log(JSON.stringify(offer));
+            console.log(JSON.stringify(offerPromos));
           }
         }
 
-        let unfilledResult = [];
-        for (const productId in products.unfilledProducts) {
-          unfilledResult.push({
-            product_id: productId,
-            min_price: products.unfilledProducts[productId].min_price,
-            title: products.unfilledProducts[productId].title,
-          });
-        }
-        return {
-          filledProducts: filledResult,
-          unfilledProducts: unfilledResult,
-        };
+        return result;
       }
       /////////////////////////////////////////////////////////////////////////////
 
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
       async function getNextPage(memento, i) {
         let res = null;
+        let n = 1000;
         while (!res || !res.data || !res.data.data) {
           try {
             res = await fetch(
@@ -266,18 +245,27 @@ async function solveCaptcha() {
                 referrer:
                   "https://pokupki.market.yandex.ru/special/promo-code-landing?shopPromoId=L136267",
                 referrerPolicy: "unsafe-url",
-                body: `{\"n\":200,\"memento\":\"${memento}\"}`,
+                body: `{\"n\":${n},\"memento\":\"${memento}\"}`,
                 method: "POST",
                 mode: "cors",
                 credentials: "include",
               }
             ).then((res) => res.json());
-          } catch (e) {}
+          } catch (e) {
+            await sleep(20000);
+            console.log(e);
+          }
+          n /= 2;
+          n = parseInt(n);
+          if (n < 1) {
+            n = 1;
+          }
         }
         const next_memento = res.data.memento;
-        let products = parseCollections(res.data.data.collections)
-          .filledProducts;
+        let products = parseCollections(res.data.data.collections);
         if (i > 0 && next_memento) {
+          console.log("Waiting before next page...");
+          await sleep(1000);
           products = [...products, ...(await getNextPage(next_memento, i - 1))];
         }
 
@@ -295,36 +283,34 @@ async function solveCaptcha() {
           console.log(document.querySelector("html").innerHTML);
         }
         const lazyRender = await fetch(
-          "https://pokupki.market.yandex.ru/api/render-lazy",
+          "https://pokupki.market.yandex.ru/api/render-lazy?w=%40marketfront%2FRoll",
           {
             headers: {
               accept: "*/*",
               "accept-language": "en-US,en;q=0.9,ru;q=0.8",
               "content-type": "application/json",
+              "sec-ch-ua":
+                '"Chromium";v="92", " Not A;Brand";v="99", "Microsoft Edge";v="92"',
+              "sec-ch-ua-mobile": "?0",
               "sec-fetch-dest": "empty",
               "sec-fetch-mode": "cors",
               "sec-fetch-site": "same-origin",
               sk: window.state.user.secretKey,
             },
-            referrer: "https://pokupki.market.yandex.ru/promo-code-landing",
+            referrer:
+              "https://pokupki.market.yandex.ru/special/promo-code-landing?shopPromoId=L141151",
             referrerPolicy: "unsafe-url",
             body: JSON.stringify({
               widgets: [
                 {
                   lazyId: "94802748",
-                  widgetName: "@marketplace/Roll",
+                  widgetName: "@marketfront/Roll",
                   options: {
                     id: 94802748,
                     mboWidgetId: 94802748,
                     props: {
-                      limit: 300,
-                      subtitle: {
-                        type: "default",
-                      },
-                      titleParams: {
-                        size: "m",
-                        type: "default",
-                      },
+                      subtitle: { type: "default" },
+                      titleParams: { size: "m", type: "default" },
                       paddingTop: "normal",
                       paddingBottom: "normal",
                       paddingLeft: "normal",
@@ -334,24 +320,14 @@ async function solveCaptcha() {
                       compensateSideMargin: false,
                     },
                     resources: {
-                      garsons: [
-                        {
-                          id: "PrimeSearchNormalized",
-                          count: 15,
-                          params: {
-                            onstock: "1",
-                            hid: "6427100",
-                          },
+                      garsons: shopPromoIds.map((shopPromoId) => ({
+                        id: "PrimeSearchNormalized",
+                        count: 99999,
+                        params: {
+                          onstock: "1",
+                          "shop-promo-id": [shopPromoId],
                         },
-                        ...shopPromoIds.map((shopPromoId) => ({
-                          id: "PrimeSearchNormalized",
-                          count: 99999,
-                          params: {
-                            onstock: "1",
-                            "shop-promo-id": [shopPromoId],
-                          },
-                        })),
-                      ],
+                      })),
                     },
                     name: "Roll",
                     otherCmsOptions: {
@@ -363,12 +339,11 @@ async function solveCaptcha() {
                   slotOptions: {},
                 },
               ],
-              cspNonce: "oRkgT2yCM7ZeUnCL0IecAg==",
+              cspNonce: "Bow9nCFSMX2eC9PFjIZEZA==",
               path: "/special/promo-code-landing",
             }),
             method: "POST",
             mode: "cors",
-            credentials: "include",
           }
         ).then((res) => res.text());
         const dataStart = lazyRender.indexOf(
@@ -382,8 +357,9 @@ async function solveCaptcha() {
             dataEnd
           )
         );
-        const memento =
-          data["widgets"]["@marketplace/Roll"]["/94802748"].memento;
+        const mementoStart = lazyRender.indexOf("memento") + 10;
+        const mementoEnd = lazyRender.indexOf('"', mementoStart);
+        const memento = lazyRender.substring(mementoStart, mementoEnd);
         const products = await getNextPage(memento, 100000);
         //console.log(products);
         return products;
@@ -407,6 +383,7 @@ async function solveCaptcha() {
   const db = client.db("ymsales");
   const updates_collection = db.collection("updates");
   const products_collection = db.collection("products");
+  const promos_collection = db.collection("promos");
   const products_from_promos_collection = db.collection(
     "products_from_promos_collection"
   );
@@ -420,14 +397,19 @@ async function solveCaptcha() {
       ...require("./products_from_search.json"),
     ];
     console.log("And there");
-    shopPromoIds = products.reduce(
-      (prev, curr) => prev.add(curr.shopPromoId),
-      new Set()
-    );
+    shopPromoIds = (
+      await promos_collection
+        .find({ timestamp: { $gt: Date.now() - 2.592e9 } })
+        .toArray()
+    ).map((p) => p.promo);
+    // products.reduce(
+    //   (prev, curr) => prev.add(curr.shopPromoId),
+    //   new Set()
+    // );
 
-    shopPromoIds.delete("L137199");
-    shopPromoIds.delete(null);
-    shopPromoIds = [...shopPromoIds];
+    // shopPromoIds.delete("L137199");
+    // shopPromoIds.delete(null);
+    // shopPromoIds = [...shopPromoIds];
 
     console.log(shopPromoIds);
 
@@ -435,6 +417,18 @@ async function solveCaptcha() {
     const productsFromPromos = await parseAllPromos();
     if (products.length === 0) {
       throw "WTF";
+    }
+
+    const archive_files = 3;
+    for (let i = archive_files; i >= 0; i--) {
+      const from =
+        i === 0
+          ? `./products_from_promos.json`
+          : `./products_from_promos_${i}.json`;
+      const to = `./products_from_promos_${i + 1}.json`;
+      if (fs.existsSync(from)) {
+        fs.copyFileSync(from, to);
+      }
     }
 
     fs.writeFileSync(
@@ -452,3 +446,9 @@ async function solveCaptcha() {
     await sleep(10000);
   }
 })();
+
+process.on("unhandledRejection", (e) => {
+  console.error(e);
+  process.exit(-1);
+  throw e;
+});

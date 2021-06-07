@@ -223,15 +223,16 @@ async function setupBrowser() {
 
           for (const _offerShowPlace of Object.values(offerShowPlace)) {
             for (const promoId of _offerShowPlace.promoIds) {
-              if (!result[_offerShowPlace.id])
+              if (!result[_offerShowPlace.id]) {
                 if (!_offerShowPlace.urls.direct.match(/\/(\d+)/)) {
                   //console.log(JSON.stringify(offerShowPlace, null, 2));
                   continue;
                 }
-              result[_offerShowPlace.id] = {
-                promos: [],
-                id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[1],
-              };
+                result[_offerShowPlace.id] = {
+                  promos: [],
+                  id: _offerShowPlace.urls.direct.match(/\/(\d+)/)[1],
+                };
+              }
               result[_offerShowPlace.id].promos.push(promoId);
             }
           }
@@ -291,6 +292,10 @@ async function setupBrowser() {
           // console.log(JSON.stringify(promos, null, 2));
           const products = parseProduct(collections.product);
           //console.log(JSON.stringify(products, null, 2));
+
+          console.log(offerShowPlaces);
+          console.log(promos);
+          console.log(products);
 
           let filledResult = [];
 

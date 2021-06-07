@@ -139,7 +139,7 @@ export default function Home({
         <img
           src={
             row.img
-              ? `//avatars.mds.yandex.net/get-mpic/${row.img}/50x50`
+              ? `//avatars.mds.yandex.net/${row.img}/50x50`
               : "/not_found_svg.svg"
           }
           width="50"
@@ -417,10 +417,10 @@ export default function Home({
             Последнее обновление списка товаров:{" "}
             {new Date(fastScanEnd).toLocaleString()}
           </p>
-          <p className="mb-0">
+          {/* <p className="mb-0">
             Последнее обновление списка промокодов и реальной выгоды:{" "}
             {new Date(scanEnd).toLocaleString()}
-          </p>
+          </p> */}
         </Alert>
         <Alert color="info" className="mb-0" fade={false}>
           Ссылки на Маркет являются партнёрскими(
@@ -486,12 +486,33 @@ export async function getStaticProps(context) {
   const products_collection = db.collection("products");
   const updates_collection = db.collection("updates");
 
+  const archive_files = 3;
+  let fastProductsMap = {};
+  for (let i = archive_files; i >= 0; i--) {
+    const from =
+      i === 0
+        ? `./products_from_promos.json`
+        : `./products_from_promos_${i}.json`;
+    if (!fs.existsSync(from)) continue;
+    const products_from_file = JSON.parse(fs.readFileSync(from, "utf-8"));
+    for (const product of products_from_file) {
+      fastProductsMap[product.id] = product;
+    }
+  }
+  const fastProducts = Object.values(fastProductsMap);
+
   let codes = new Set();
   const products = [
-    ...(await products_collection.find({}).toArray()),
+    ...(await products_collection
+      .find({
+        min_price: { $ne: null },
+        id: { $in: fastProducts.map((p) => "" + p.id) },
+      })
+      .toArray()),
     ...require("../products_from_search.json"),
   ];
-  const fastProducts = require("../products_from_promos.json");
+
+  console.log(products.length);
 
   const scanEnds = (await updates_collection.findOne()) || {};
 
@@ -525,11 +546,7 @@ export async function getStaticProps(context) {
     }
   }
 
-  codes.add("VSEMPODARKI8");
   for (const product of products) {
-    if (!product.code) {
-      console.log(product);
-    }
     //codes.add(product.code);
     if (!uniqueProducts[product.id]) {
       if (product.code !== "VSEMPODARKI8") continue;
@@ -571,13 +588,11 @@ export async function getStaticProps(context) {
     JSON.stringify([...unknowHids])
   );
 
-  codes = [...codes]
-    .filter((code) => code !== "VSEMPODARKI8")
-    .sort(
-      (a, b) =>
-        (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
-        (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
-    );
+  codes = [...codes].sort(
+    (a, b) =>
+      (b.match(/\d+/) ? b.match(/\d+/)[0] : 0) -
+      (a.match(/\d+/) ? a.match(/\d+/)[0] : 0)
+  );
   let codesMap = {};
   codes.forEach((code, i) => (codesMap[code] = i));
 
@@ -603,22 +618,11 @@ export async function getStaticProps(context) {
 
   console.log(Object.values(uniqueProducts)[0]);
 
-  let products_sorted = Object.values(uniqueProducts)
-    .filter(
-      (product) =>
-        product.code !== "VSEMPODARKI8" &&
-        product.code !== "DIY03_A1000" &&
-        product.code !== "DIY03_10" &&
-        product.code !== "DIY03_S10" &&
-        product.code !== "AVTO1000" &&
-        product.code !== "DIY0310" &&
-        product.code !== "DIY03_T10"
-    )
-    .sort(
-      (a, b) =>
-        (parseInt(b.real_discount) + 0.1 || 0.5) -
-        (parseInt(a.real_discount) + 0.1 || 0.5)
-    );
+  let products_sorted = Object.values(uniqueProducts).sort(
+    (a, b) =>
+      (parseInt(b.real_discount) + 0.1 || 0.5) -
+      (parseInt(a.real_discount) + 0.1 || 0.5)
+  );
 
   const wtf_products = products_sorted.filter(
     (p) => !p.category || !categoriesIds[p.category]
@@ -632,31 +636,31 @@ export async function getStaticProps(context) {
     (p) => !!p.category && categoriesIds[p.category] && p.price < p.old_price
   );
 
-  return {
-    props: {
-      codes: codes,
-      hierarchy: categoriesHierarhyNew.hierarchy,
-      parentCategories: categoriesHierarhyNew.parentCategories.sort(),
-      products: products_sorted.map((product) => ({
-        name: product.name,
-        img: product.img
-          ? product.img
-              .replace("https://avatars.mds.yandex.net/get-mpic/", "")
-              .replace("//avatars.mds.yandex.net/get-mpic/", "")
-              .replace("/50x50", "")
-          : null,
-        id: product.id,
-        code: codesMap[product.code],
-        old_price: product.old_price,
-        price: product.price,
-        category: categoriesIds[product.category],
-        real_discount: product.real_discount,
-      })),
 
-      categoriesIds,
-      categories,
-      scanEnd,
-      fastScanEnd,
-    },
-  };
+  return JSON.parse(
+    JSON.stringify({
+      props: {
+        codes: codes,
+        hierarchy: categoriesHierarhyNew.hierarchy,
+        parentCategories: categoriesHierarhyNew.parentCategories.sort(),
+        products: products_sorted.map((product) => ({
+          name: product.name,
+          img: product.img
+            ? (product.img.split('/')[3] + '/' + product.img.split('/')[4] + '/' + product.img.split('/')[5])
+            : null,
+          id: product.id,
+          code: codesMap[product.code],
+          old_price: product.old_price,
+          price: product.price,
+          category: categoriesIds[product.category],
+          real_discount: product.real_discount,
+        })),
+
+        categoriesIds,
+        categories,
+        scanEnd,
+        fastScanEnd,
+      },
+    })
+  );
 }

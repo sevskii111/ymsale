@@ -1,0 +1,4 @@
+while true; do npm run deploy; sleep 15m; done
+while true; do node auto_promos_updater.js --debug; sleep 15m; done
+while true; do node auto_promos_getter.js --captcha 5007969bbf604afc320aa2dee8797f62; sleep 15m; done
+while true; do node auto_products_updater_new.js --captcha 5007969bbf604afc320aa2dee8797f62; sleep 15m; done

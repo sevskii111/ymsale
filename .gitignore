@@ -44,3 +44,6 @@ _*
 public/unknownHids.json
 shopPromoIds.json
 shopPromoIds_fast.json
+
+.parcel*
+dist
